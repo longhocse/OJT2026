@@ -13,17 +13,19 @@ const Review = require("../models/Review");
 
 const AppDataSource = new DataSource({
   type: "mssql",
-  host: "localhost\\SQLEXPRESS2025",  // Dùng instance name
+  host: "localhost",
+  port: 1433,
   username: "sa",
-  password: "123456",  // Thay bằng mật khẩu đúng
+  password: "1234",
   database: "MovieTapDB",
-  synchronize: false,
-  logging: true,
+
   options: {
     encrypt: false,
     trustServerCertificate: true,
-    enableArithAbort: true,
   },
+
+  synchronize: false,
+  logging: true,
   entities: [User, Movie, Theater, Screen, Show, Seat, Booking, BookingSeat, Review],
 });
 
