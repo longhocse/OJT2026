@@ -13,7 +13,6 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     setCredentials: (state, action) => {
-      console.log("setCredentials called with:", action.payload);
       state.user = action.payload.user;
       state.token = action.payload.token;
       state.isAuthenticated = true;
@@ -22,15 +21,16 @@ const authSlice = createSlice({
       localStorage.setItem("user", JSON.stringify(action.payload.user));
       localStorage.setItem("token", action.payload.token);
       
-      console.log("State updated:", state);
+      console.log("✅ Auth state updated:", {
+        user: action.payload.user,
+        role: action.payload.user?.role
+      });
     },
     logout: (state) => {
-      console.log("logout called");
       state.user = null;
       state.token = null;
       state.isAuthenticated = false;
       
-      // Xóa localStorage
       localStorage.removeItem("user");
       localStorage.removeItem("token");
     },

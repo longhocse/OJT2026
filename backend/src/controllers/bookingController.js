@@ -1,3 +1,4 @@
+// backend/src/controllers/bookingController.js
 const { AppDataSource } = require("../config/database");
 
 exports.createBooking = async (req, res) => {
@@ -12,7 +13,13 @@ exports.createBooking = async (req, res) => {
     const bookingRepo = queryRunner.manager.getRepository("Booking");
     const bookingSeatRepo = queryRunner.manager.getRepository("BookingSeat");
 
-    const show = await showRepo.findOne({ where: { id: showId }, relations: ["movie", "screen"] });
+    const show = await showRepo.findOne({ 
+      where: { id: showId }, 
+      relations: {
+        movie: true,
+        screen: true
+      }
+    });
     if (!show) throw new Error("Show not found");
 
     const seats = await seatRepo.findByIds(seatIds);
@@ -77,37 +84,59 @@ exports.createBooking = async (req, res) => {
     });
   } catch (error) {
     await queryRunner.rollbackTransaction();
-    console.error(error);
+    console.error("❌ Create booking error:", error);
     res.status(400).json({ message: error.message });
   } finally {
     await queryRunner.release();
   }
 };
 
+// SỬA: Dùng object syntax cho relations
 exports.getBookingById = async (req, res) => {
   try {
     const repo = AppDataSource.getRepository("Booking");
     const booking = await repo.findOne({
       where: { id: req.params.id },
-      relations: ["user", "show", "show.movie", "show.screen", "bookingSeats", "bookingSeats.seat"],
+      relations: {
+        user: true,
+        show: {
+          movie: true,
+          screen: {
+            theater: true
+          }
+        },
+        bookingSeats: {
+          seat: true
+        }
+      }
     });
     if (!booking) return res.status(404).json({ message: "Not found" });
     res.json(booking);
   } catch (error) {
+    console.error("❌ Get booking error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
+// SỬA: Dùng object syntax cho relations
 exports.getUserBookings = async (req, res) => {
   try {
     const repo = AppDataSource.getRepository("Booking");
     const bookings = await repo.find({
       where: { user: { id: req.params.userId } },
-      relations: ["show", "show.movie", "bookingSeats", "bookingSeats.seat"],
+      relations: {
+        show: {
+          movie: true
+        },
+        bookingSeats: {
+          seat: true
+        }
+      },
       order: { created_at: "DESC" },
     });
     res.json(bookings);
   } catch (error) {
+    console.error("❌ Get user bookings error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -120,14 +149,22 @@ exports.cancelBooking = async (req, res) => {
     const repo = queryRunner.manager.getRepository("Booking");
     const booking = await repo.findOne({
       where: { id: req.params.id },
-      relations: ["show", "bookingSeats", "bookingSeats.seat"],
+      relations: {
+        show: true,
+        bookingSeats: {
+          seat: true
+        }
+      }
     });
     if (!booking) return res.status(404).json({ message: "Not found" });
+    
     const showTime = new Date(booking.show.start_time);
     const hoursDiff = (showTime - new Date()) / (1000 * 60 * 60);
     if (hoursDiff < 2) return res.status(400).json({ message: "Cannot cancel within 2 hours" });
+    
     booking.status = "cancelled";
     await queryRunner.manager.save(booking);
+    
     for (const bs of booking.bookingSeats) {
       bs.seat.status = "available";
       bs.seat.locked_until = null;
@@ -137,6 +174,7 @@ exports.cancelBooking = async (req, res) => {
     res.json({ message: "Cancelled" });
   } catch (error) {
     await queryRunner.rollbackTransaction();
+    console.error("❌ Cancel booking error:", error);
     res.status(500).json({ message: "Server error" });
   } finally {
     await queryRunner.release();
@@ -153,6 +191,7 @@ exports.lockSeats = async (req, res) => {
     });
     res.json({ message: "Seats locked", expiresIn: duration });
   } catch (error) {
+    console.error("❌ Lock seats error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -164,6 +203,7 @@ exports.unlockSeats = async (req, res) => {
     await seatRepo.update(seatIds, { status: "available", locked_until: null });
     res.json({ message: "Seats unlocked" });
   } catch (error) {
+    console.error("❌ Unlock seats error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
