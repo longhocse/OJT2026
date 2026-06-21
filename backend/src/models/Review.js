@@ -3,6 +3,18 @@ const { EntitySchema } = require("typeorm");
 module.exports = new EntitySchema({
   name: "Review",
   tableName: "reviews",
+  uniques: [
+    {
+      name: "UQ_reviews_user_movie",
+      columns: ["user", "movie"],
+    },
+  ],
+  checks: [
+    {
+      name: "CK_reviews_rating",
+      expression: "rating >= 1 AND rating <= 5",
+    },
+  ],
   columns: {
     id: {
       primary: true,
@@ -10,7 +22,7 @@ module.exports = new EntitySchema({
       generated: "uuid",
     },
     rating: { type: "float" },
-    comment: { type: "text" },
+    comment: { type: "text", nullable: true },
     created_at: { type: "datetime", createDate: true },
   },
   relations: {
@@ -18,11 +30,13 @@ module.exports = new EntitySchema({
       target: "User",
       type: "many-to-one",
       joinColumn: { name: "user_id" },
+      nullable: false,
     },
     movie: {
       target: "Movie",
       type: "many-to-one",
       joinColumn: { name: "movie_id" },
+      nullable: false,
     },
   },
 });

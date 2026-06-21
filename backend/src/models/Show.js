@@ -18,11 +18,13 @@ module.exports = new EntitySchema({
       target: "Screen",
       type: "many-to-one",
       joinColumn: { name: "screen_id" },
+      nullable: true,
     },
     movie: {
       target: "Movie",
       type: "many-to-one",
       joinColumn: { name: "movie_id" },
+      nullable: true,
     },
     bookings: {
       target: "Booking",

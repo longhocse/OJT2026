@@ -1,131 +1,153 @@
-// backend/src/controllers/movieController.js
 const { AppDataSource } = require("../config/database");
+const { AppError } = require("../utils/AppError");
+const logger = require("../utils/logger");
 
-// Lấy danh sách phim với filter
+const sanitizeReview = (review) => {
+  if (!review.user) return review;
+  const { password_hash, ...user } = review.user;
+  return { ...review, user };
+};
+
 exports.getMovies = async (req, res) => {
-  try {
-    const { genre, minRating, sortBy = "release_date", page = 1, limit = 10, status } = req.query;
-    const repo = AppDataSource.getRepository("Movie");
-    const qb = repo.createQueryBuilder("movie");
-    
-    if (genre) qb.andWhere("movie.genre LIKE :genre", { genre: `%${genre}%` });
-    if (minRating) qb.andWhere("movie.rating >= :minRating", { minRating });
-    if (status) qb.andWhere("movie.status = :status", { status });
-    if (sortBy === "popular") qb.orderBy("movie.rating", "DESC");
-    else qb.orderBy("movie.release_date", "DESC");
-    
-    const [movies, total] = await qb.skip((+page - 1) * +limit).take(+limit).getManyAndCount();
-    res.json({ data: movies, pagination: { page: +page, limit: +limit, total, pages: Math.ceil(total / +limit) } });
-  } catch (error) {
-    console.error("❌ Get movies error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
+  const { genre, minRating, sortBy = "release_date", page = 1, limit = 10, status } = req.query;
+  const qb = AppDataSource.getRepository("Movie").createQueryBuilder("movie");
+  if (genre) qb.andWhere("movie.genre LIKE :genre", { genre: `%${genre}%` });
+  if (minRating) qb.andWhere("movie.rating >= :minRating", { minRating });
+  if (status) qb.andWhere("movie.status = :status", { status });
+  qb.orderBy(sortBy === "popular" ? "movie.rating" : "movie.release_date", "DESC");
+
+  const [movies, total] = await qb
+    .skip((Number(page) - 1) * Number(limit))
+    .take(Number(limit))
+    .getManyAndCount();
+  res.json({
+    data: movies,
+    pagination: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      pages: Math.ceil(total / Number(limit)),
+    },
+  });
 };
 
-// Lấy chi tiết phim - SỬA LỖI relations
 exports.getMovieById = async (req, res) => {
-  try {
-    const repo = AppDataSource.getRepository("Movie");
-    const movie = await repo.findOne({
-      where: { id: req.params.id },
-      relations: {
-        reviews: {
-          user: true  // SỬA: Dùng object syntax thay vì array
-        }
-      }
-    });
-    if (!movie) return res.status(404).json({ message: "Not found" });
-    res.json(movie);
-  } catch (error) {
-    console.error("❌ Get movie error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
+  const movie = await AppDataSource.getRepository("Movie").findOne({
+    where: { id: req.params.id },
+    relations: { reviews: { user: true } },
+  });
+  if (!movie) throw new AppError(404, "MOVIE_NOT_FOUND", "Movie not found");
+  res.json({ ...movie, reviews: movie.reviews.map(sanitizeReview) });
 };
 
-// Tạo phim mới (Admin)
 exports.createMovie = async (req, res) => {
-  try {
-    const repo = AppDataSource.getRepository("Movie");
-    const movie = repo.create(req.body);
-    await repo.save(movie);
-    res.status(201).json(movie);
-  } catch (error) {
-    console.error("❌ Create movie error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
+  const repo = AppDataSource.getRepository("Movie");
+  const movie = repo.create(res.locals.validated.body);
+  await repo.save(movie);
+  res.status(201).json(movie);
 };
 
-// Cập nhật phim (Admin)
 exports.updateMovie = async (req, res) => {
-  try {
-    const repo = AppDataSource.getRepository("Movie");
-    const movie = await repo.findOneBy({ id: req.params.id });
-    if (!movie) return res.status(404).json({ message: "Not found" });
-    repo.merge(movie, req.body);
-    await repo.save(movie);
-    res.json(movie);
-  } catch (error) {
-    console.error("❌ Update movie error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
+  const repo = AppDataSource.getRepository("Movie");
+  const movie = await repo.findOneBy({ id: req.params.id });
+  if (!movie) throw new AppError(404, "MOVIE_NOT_FOUND", "Movie not found");
+  repo.merge(movie, res.locals.validated.body);
+  await repo.save(movie);
+  res.json(movie);
 };
 
-// Xóa phim (Admin)
 exports.deleteMovie = async (req, res) => {
-  try {
-    const repo = AppDataSource.getRepository("Movie");
-    const result = await repo.delete(req.params.id);
-    if (result.affected === 0) return res.status(404).json({ message: "Not found" });
-    res.json({ message: "Deleted" });
-  } catch (error) {
-    console.error("❌ Delete movie error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
+  const result = await AppDataSource.getRepository("Movie").delete(req.params.id);
+  if (result.affected === 0) throw new AppError(404, "MOVIE_NOT_FOUND", "Movie not found");
+  res.json({ message: "Deleted" });
 };
 
-// Lấy reviews của phim
 exports.getReviews = async (req, res) => {
-  try {
-    const repo = AppDataSource.getRepository("Review");
-    const reviews = await repo.find({
-      where: { movie: { id: req.params.movieId } },
-      relations: {
-        user: true  // SỬA: Dùng object syntax
-      },
-      order: { created_at: "DESC" },
-    });
-    res.json(reviews);
-  } catch (error) {
-    console.error("❌ Get reviews error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
+  const reviews = await AppDataSource.getRepository("Review").find({
+    where: { movie: { id: req.params.movieId } },
+    relations: { user: true },
+    order: { created_at: "DESC" },
+  });
+  res.json(reviews.map(sanitizeReview));
 };
 
-// Thêm review
-exports.addReview = async (req, res) => {
+exports.addReview = async (req, res, next) => {
+  const { rating, comment } = res.locals.validated.body;
+  const movieId = req.params.movieId;
+  const queryRunner = AppDataSource.createQueryRunner();
+  let transactionStarted = false;
   try {
-    const { rating, comment } = req.body;
-    const reviewRepo = AppDataSource.getRepository("Review");
-    const movieRepo = AppDataSource.getRepository("Movie");
-    
-    const review = reviewRepo.create({
-      rating,
-      comment,
-      user: { id: req.user.id },
-      movie: { id: req.params.movieId },
+    await queryRunner.connect();
+    await queryRunner.startTransaction("SERIALIZABLE");
+    transactionStarted = true;
+
+    const movieRepo = queryRunner.manager.getRepository("Movie");
+    const bookingRepo = queryRunner.manager.getRepository("Booking");
+    const reviewRepo = queryRunner.manager.getRepository("Review");
+    const movie = await movieRepo.findOne({
+      where: { id: movieId },
+      lock: { mode: "pessimistic_write" },
     });
-    await reviewRepo.save(review);
-    
+    if (!movie) throw new AppError(404, "MOVIE_NOT_FOUND", "Movie not found");
+
+    const eligibleBooking = await bookingRepo
+      .createQueryBuilder("booking")
+      .innerJoin("booking.user", "bookingUser")
+      .innerJoin("booking.show", "show")
+      .innerJoin("show.movie", "bookedMovie")
+      .where("bookingUser.id = :userId", { userId: req.user.id })
+      .andWhere("bookedMovie.id = :movieId", { movieId })
+      .andWhere("booking.status = :status", { status: "confirmed" })
+      .getOne();
+    if (!eligibleBooking) {
+      throw new AppError(
+        403,
+        "REVIEW_NOT_ALLOWED",
+        "A confirmed booking is required to review this movie",
+      );
+    }
+
+    let review = await reviewRepo.findOne({
+      where: { user: { id: req.user.id }, movie: { id: movieId } },
+      lock: { mode: "pessimistic_write" },
+    });
+    const created = !review;
+    if (!review) {
+      review = reviewRepo.create({
+        user: { id: req.user.id },
+        movie: { id: movieId },
+      });
+    }
+    review.rating = rating;
+    review.comment = comment || null;
+    await queryRunner.manager.save(review);
+
     const avgResult = await reviewRepo
       .createQueryBuilder("review")
+      .innerJoin("review.movie", "reviewedMovie")
       .select("AVG(review.rating)", "avg")
-      .where("review.movieId = :movieId", { movieId: req.params.movieId })
+      .where("reviewedMovie.id = :movieId", { movieId })
       .getRawOne();
-      
-    await movieRepo.update(req.params.movieId, { rating: parseFloat(avgResult.avg) || 0 });
-    res.status(201).json(review);
+    movie.rating = Number(avgResult.avg) || 0;
+    await queryRunner.manager.save(movie);
+
+    await queryRunner.commitTransaction();
+    transactionStarted = false;
+    return res.status(created ? 201 : 200).json(review);
   } catch (error) {
-    console.error("❌ Add review error:", error);
-    res.status(500).json({ message: "Server error" });
+    if (transactionStarted) {
+      try {
+        await queryRunner.rollbackTransaction();
+      } catch (rollbackError) {
+        return next(rollbackError);
+      }
+    }
+    return next(error);
+  } finally {
+    try {
+      await queryRunner.release();
+    } catch (releaseError) {
+      logger.error("review_query_runner_release_failed", { error: releaseError });
+    }
   }
 };

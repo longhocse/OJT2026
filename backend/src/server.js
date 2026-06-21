@@ -1,65 +1,69 @@
-// backend/src/server.js
-const express = require("express");
-const cors = require("cors");
-const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
-require("dotenv").config();
-
-console.log("CORS_ORIGIN =", process.env.CORS_ORIGIN);
-console.log("JWT_SECRET =", process.env.JWT_SECRET ? "Set" : "Not set");
-
+const { env } = require("./config/env");
 const { AppDataSource } = require("./config/database");
-const routes = require("./routes");
-const { errorHandler } = require("./middleware/errorHandler");
+const { createApp } = require("./app");
+const logger = require("./utils/logger");
 
-const app = express();
-const PORT = process.env.PORT || 5000;
+const createGracefulShutdown = ({ server, dataSource = AppDataSource, timeoutMs = 10000 }) => {
+  let shutdownPromise;
 
-// CORS Configuration
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || "http://localhost:3000",
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-}));
+  return (signal = "manual") => {
+    if (shutdownPromise) return shutdownPromise;
 
-// Logging middleware
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  console.log("Headers:", req.headers);
-  next();
-});
+    shutdownPromise = (async () => {
+      logger.info("shutdown_started", { signal });
+      await new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          logger.error("http_shutdown_timeout", { timeoutMs });
+          server.closeAllConnections?.();
+          resolve();
+        }, timeoutMs);
+        timeout.unref?.();
 
-app.use(helmet());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+        server.close(() => {
+          clearTimeout(timeout);
+          resolve();
+        });
+        server.closeIdleConnections?.();
+      });
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: "Too many requests from this IP",
-});
-app.use("/api", limiter);
+      if (dataSource.isInitialized) {
+        await dataSource.destroy();
+        logger.info("database_disconnected");
+      }
+      logger.info("shutdown_completed", { signal });
+    })();
 
-app.use("/api", routes);
+    return shutdownPromise;
+  };
+};
 
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
+const startServer = async () => {
+  await AppDataSource.initialize();
+  logger.info("database_connected");
 
-app.use(errorHandler);
-
-AppDataSource.initialize()
-  .then(() => {
-    console.log("Database connected");
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-      console.log(`CORS enabled for: ${process.env.CORS_ORIGIN || "http://localhost:3000"}`);
-    });
-  })
-  .catch((err) => {
-    console.error("Database connection failed:");
-    console.error(err);
-    process.exit(1);
+  const app = createApp({ dataSource: AppDataSource });
+  const server = app.listen(env.PORT, () => {
+    logger.info("server_started", { port: env.PORT, corsOrigins: env.CORS_ALLOWED_ORIGINS });
   });
+  const shutdown = createGracefulShutdown({ server });
+  server.shutdown = shutdown;
+
+  for (const signal of ["SIGTERM", "SIGINT"]) {
+    process.once(signal, () => {
+      shutdown(signal).catch((error) => {
+        logger.error("shutdown_failed", { signal, error });
+        process.exitCode = 1;
+      });
+    });
+  }
+  return server;
+};
+
+if (require.main === module) {
+  startServer().catch((error) => {
+    logger.error("server_start_failed", { error });
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { createGracefulShutdown, startServer };

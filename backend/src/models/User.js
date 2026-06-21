@@ -10,23 +10,27 @@ module.exports = new EntitySchema({
       generated: "uuid",
     },
     email: {
-      type: "varchar",
+      type: "nvarchar",
+      length: 255,
       unique: true,
     },
     password_hash: {
-      type: "varchar",
+      type: "nvarchar",
+      length: 255,
     },
     name: {
-      type: "varchar",
+      type: "nvarchar",
+      length: 100,
     },
     phone: {
-      type: "varchar",
+      type: "nvarchar",
+      length: 20,
       nullable: true,
     },
     role: {
-  type: "varchar",
-  default: "customer"
-
+      type: "nvarchar",
+      length: 20,
+      default: "customer",
     },
     created_at: {
       type: "datetime",

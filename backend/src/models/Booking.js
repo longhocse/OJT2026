@@ -10,8 +10,8 @@ module.exports = new EntitySchema({
       generated: "uuid",
     },
     total_price: { type: "decimal", precision: 10, scale: 2 },
-    status: { type: "varchar", default: "pending" },
-    payment_method: { type: "varchar", nullable: true },
+    status: { type: "nvarchar", length: 20, default: "pending" },
+    payment_method: { type: "nvarchar", length: 50, nullable: true },
     created_at: { type: "datetime", createDate: true },
   },
   relations: {
@@ -19,11 +19,13 @@ module.exports = new EntitySchema({
       target: "User",
       type: "many-to-one",
       joinColumn: { name: "user_id" },
+      nullable: true,
     },
     show: {
       target: "Show",
       type: "many-to-one",
       joinColumn: { name: "show_id" },
+      nullable: true,
     },
     bookingSeats: {
       target: "BookingSeat",

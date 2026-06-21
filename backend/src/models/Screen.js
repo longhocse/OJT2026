@@ -9,15 +9,17 @@ module.exports = new EntitySchema({
       type: "uuid",
       generated: "uuid",
     },
-    name: { type: "varchar" },
+    name: { type: "nvarchar", length: 50 },
     total_seats: { type: "int" },
-    layout_json: { type: "nvarchar", nullable: true },
+    layout_json: { type: "nvarchar", length: "MAX", nullable: true },
   },
   relations: {
     theater: {
       target: "Theater",
       type: "many-to-one",
       joinColumn: { name: "theater_id" },
+      nullable: true,
+      onDelete: "CASCADE",
     },
     shows: {
       target: "Show",

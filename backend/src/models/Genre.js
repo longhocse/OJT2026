@@ -11,11 +11,13 @@ module.exports = new EntitySchema({
       generated: "uuid",
     },
     name: {
-      type: "varchar",
+      type: "nvarchar",
+      length: 100,
       unique: true,
     },
     description: {
-      type: "varchar",
+      type: "nvarchar",
+      length: 500,
       nullable: true,
     },
     created_at: {

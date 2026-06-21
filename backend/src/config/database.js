@@ -1,6 +1,6 @@
 // backend/src/config/database.js
 const { DataSource } = require("typeorm");
-require("dotenv").config();
+const { env } = require("./env");
 
 const User = require("../models/User");
 const Movie = require("../models/Movie");
@@ -12,30 +12,29 @@ const Seat = require("../models/Seat");
 const Booking = require("../models/Booking");
 const BookingSeat = require("../models/BookingSeat");
 const Review = require("../models/Review");
+const ShowSeatState = require("../models/ShowSeatState");
 
 const AppDataSource = new DataSource({
   type: "mssql",
-  host: process.env.DB_HOST || "localhost",
-  port: parseInt(process.env.DB_PORT) || 1433,
-  username: process.env.DB_USERNAME || "sa",
-  password: process.env.DB_PASSWORD || "1234",
-  database: process.env.DB_DATABASE || "MovieTapDB",
-  
+  host: env.DB_HOST,
+  port: env.DB_PORT,
+  username: env.DB_USERNAME,
+  password: env.DB_PASSWORD,
+  database: env.DB_DATABASE,
+
   // Cấu hình cho SQL Server
   options: {
-    encrypt: false,
-    trustServerCertificate: true,
+    encrypt: env.DB_ENCRYPT,
+    trustServerCertificate: env.DB_TRUST_SERVER_CERTIFICATE,
   },
-  
+
   // Nếu dùng instance name SQLEXPRESS
-  extra: {
-    instanceName: "SQLEXPRESS",
-  },
+  extra: env.DB_INSTANCE ? { instanceName: env.DB_INSTANCE } : {},
 
   entities: [
     User,
     Movie,
-    Genre,      // Thêm Genre vào entities
+    Genre, // Thêm Genre vào entities
     Theater,
     Screen,
     Show,
@@ -43,9 +42,10 @@ const AppDataSource = new DataSource({
     Booking,
     BookingSeat,
     Review,
+    ShowSeatState,
   ],
-  
-  synchronize: false,  // Không tự động sync để tránh mất dữ liệu
+
+  synchronize: false, // Không tự động sync để tránh mất dữ liệu
   logging: false,
 });
 

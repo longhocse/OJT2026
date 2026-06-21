@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+node_modules
+coverage
+test
+test-support
+docs
+*.log
+npm-debug.log*
+new.sql

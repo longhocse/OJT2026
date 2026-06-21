@@ -1,112 +1,65 @@
-// backend/src/controllers/showController.js
 const { AppDataSource } = require("../config/database");
-const { MoreThan } = require("typeorm");
+const { AppError } = require("../utils/AppError");
 
 exports.getShows = async (req, res) => {
-  try {
-    const { movieId, theaterId, date } = req.query;
-    const repo = AppDataSource.getRepository("Show");
-    const qb = repo.createQueryBuilder("show")
-      .leftJoinAndSelect("show.movie", "movie")
-      .leftJoinAndSelect("show.screen", "screen")
-      .leftJoinAndSelect("screen.theater", "theater");
-      
-    if (movieId) qb.andWhere("movie.id = :movieId", { movieId });
-    if (theaterId) qb.andWhere("theater.id = :theaterId", { theaterId });
-    if (date) {
-      const start = new Date(date);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 1);
-      qb.andWhere("show.start_time BETWEEN :start AND :end", { start, end });
-    }
-    const shows = await qb.getMany();
-    res.json(shows);
-  } catch (error) {
-    console.error("❌ Get shows error:", error);
-    res.status(500).json({ message: "Server error" });
+  const { movieId, theaterId, date } = req.query;
+  const qb = AppDataSource.getRepository("Show")
+    .createQueryBuilder("show")
+    .leftJoinAndSelect("show.movie", "movie")
+    .leftJoinAndSelect("show.screen", "screen")
+    .leftJoinAndSelect("screen.theater", "theater");
+
+  if (movieId) qb.andWhere("movie.id = :movieId", { movieId });
+  if (theaterId) qb.andWhere("theater.id = :theaterId", { theaterId });
+  if (date) {
+    const start = new Date(date);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    qb.andWhere("show.start_time >= :start AND show.start_time < :end", { start, end });
   }
+  res.json(await qb.getMany());
 };
 
-// SỬA: Dùng object syntax cho relations
 exports.getShowById = async (req, res) => {
-  try {
-    const repo = AppDataSource.getRepository("Show");
-    const show = await repo.findOne({
-      where: { id: req.params.id },
-      relations: {
-        movie: true,
-        screen: {
-          theater: true
-        }
-      }
-    });
-    if (!show) return res.status(404).json({ message: "Not found" });
-    
-    const bookingSeatRepo = AppDataSource.getRepository("BookingSeat");
-    const occupied = await bookingSeatRepo
-      .createQueryBuilder("bs")
-      .innerJoin("bs.booking", "b")
-      .where("b.showId = :showId", { showId: show.id })
-      .andWhere("b.status != 'cancelled'")
-      .getCount();
-      
-    res.json({ ...show, availableSeats: show.screen.total_seats - occupied });
-  } catch (error) {
-    console.error("❌ Get show by id error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
+  const show = await AppDataSource.getRepository("Show").findOne({
+    where: { id: req.params.id },
+    relations: { movie: true, screen: { theater: true } },
+  });
+  if (!show) throw new AppError(404, "SHOW_NOT_FOUND", "Show not found");
+
+  const occupied = await AppDataSource.getRepository("ShowSeatState").count({
+    where: { show: { id: show.id }, status: "booked" },
+  });
+  res.json({ ...show, availableSeats: show.screen.total_seats - occupied });
 };
 
-// SỬA: Dùng object syntax cho relations
 exports.getSeatsByShow = async (req, res) => {
-  try {
-    const { showId } = req.params;
-    const showRepo = AppDataSource.getRepository("Show");
-    const show = await showRepo.findOne({
-      where: { id: showId },
-      relations: {
-        screen: {
-          seats: true
-        }
-      }
-    });
-    if (!show) return res.status(404).json({ message: "Show not found" });
-    
-    const bookingSeatRepo = AppDataSource.getRepository("BookingSeat");
-    const occupied = await bookingSeatRepo
-      .createQueryBuilder("bs")
-      .innerJoin("bs.booking", "b")
-      .where("b.showId = :showId", { showId })
-      .andWhere("b.status = 'confirmed'")
-      .select("bs.seatId")
-      .getRawMany();
-      
-    const occupiedIds = new Set(occupied.map(o => o.seatId));
-    const seatRepo = AppDataSource.getRepository("Seat");
-    const locked = await seatRepo.find({
-      where: { status: "locked", locked_until: MoreThan(new Date()) },
-    });
-    const lockedIds = new Set(locked.map(l => l.id));
-    
-    const seats = show.screen.seats.map(seat => ({
-      ...seat,
-      status: occupiedIds.has(seat.id) ? "occupied" : lockedIds.has(seat.id) ? "locked" : "available",
-    }));
-    res.json(seats);
-  } catch (error) {
-    console.error("❌ Get seats by show error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
+  const { showId } = req.params;
+  const show = await AppDataSource.getRepository("Show").findOne({
+    where: { id: showId },
+    relations: { screen: { seats: true } },
+  });
+  if (!show) throw new AppError(404, "SHOW_NOT_FOUND", "Show not found");
+
+  const states = await AppDataSource.getRepository("ShowSeatState").find({
+    where: { show: { id: showId } },
+    relations: { seat: true },
+  });
+  const stateBySeatId = new Map(states.map((state) => [String(state.seat.id), state]));
+  const now = new Date();
+  const seats = show.screen.seats.map((seat) => {
+    const state = stateBySeatId.get(String(seat.id));
+    let status = "available";
+    if (state?.status === "booked") status = "occupied";
+    else if (state?.status === "locked" && new Date(state.locked_until) > now) status = "locked";
+    return { ...seat, status };
+  });
+  res.json(seats);
 };
 
 exports.createShow = async (req, res) => {
-  try {
-    const repo = AppDataSource.getRepository("Show");
-    const show = repo.create(req.body);
-    await repo.save(show);
-    res.status(201).json(show);
-  } catch (error) {
-    console.error("❌ Create show error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
+  const repo = AppDataSource.getRepository("Show");
+  const show = repo.create(res.locals.validated.body);
+  await repo.save(show);
+  res.status(201).json(show);
 };
