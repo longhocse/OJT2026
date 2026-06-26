@@ -87,6 +87,10 @@ const queryRunnerFor = (scenario, states) => {
         booking: null,
       }),
     },
+    Payment: {
+      create: (data) => ({ id: "payment-created", ...data }),
+      save: async (entity) => entity,
+    },
   };
 
   return {

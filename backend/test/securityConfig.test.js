@@ -13,12 +13,16 @@ test("security configuration and logging redact sensitive data", async (t) => {
       nested: {
         password_hash: "hash",
         refreshToken: "token",
+        card_number: "4111111111111111",
+        cvv: "123",
         safe: "visible",
       },
     });
     assert.equal(redacted.authorization, "[REDACTED]");
     assert.equal(redacted.nested.password_hash, "[REDACTED]");
     assert.equal(redacted.nested.refreshToken, "[REDACTED]");
+    assert.equal(redacted.nested.card_number, "[REDACTED]");
+    assert.equal(redacted.nested.cvv, "[REDACTED]");
     assert.equal(redacted.nested.safe, "visible");
   });
 
@@ -34,6 +38,8 @@ test("security configuration and logging redact sensitive data", async (t) => {
     assert.ok(fields.includes("DB_HOST"));
     assert.ok(fields.includes("DB_PASSWORD"));
     assert.ok(fields.includes("DB_DATABASE"));
+    assert.ok(fields.includes("PAYMENT_WEBHOOK_SECRET"));
+    assert.ok(fields.includes("TICKET_QR_SECRET"));
   });
 
   await t.test("source does not log request headers or password hashes", () => {

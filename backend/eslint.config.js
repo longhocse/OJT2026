@@ -2,7 +2,7 @@ const js = require("@eslint/js");
 
 module.exports = [
   {
-    ignores: ["node_modules/**", "coverage/**", "new.sql"],
+    ignores: ["node_modules/**", "coverage/**"],
   },
   js.configs.recommended,
   {
@@ -11,6 +11,7 @@ module.exports = [
       ecmaVersion: 2023,
       sourceType: "commonjs",
       globals: {
+        AbortSignal: "readonly",
         Buffer: "readonly",
         URL: "readonly",
         __dirname: "readonly",

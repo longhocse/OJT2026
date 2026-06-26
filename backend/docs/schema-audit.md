@@ -1,14 +1,15 @@
-# EntitySchema audit against `new.sql`
+# EntitySchema audit against the SQL Server reset schema
 
-The audit uses `new.sql` as the baseline and keeps TypeORM
-`synchronize: false`.
+The audit uses the SQL Server schema represented by
+`MovieTapDB_FULL_RESET_CURRENT.sql` as the local reset baseline and keeps
+TypeORM `synchronize: false`.
 
 ## Resolved mismatches
 
 | Entity          | Mismatch                                                                                                                                                            | Resolution                                                                                                                            |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `Seat`          | Properties `row` and `number` would target columns named `row` and `number`, while SQL defines `seat_row` and `seat_number`.                                        | Added explicit `name` mappings.                                                                                                       |
-| `Genre`         | Entity and API existed, but `new.sql` had no `genres` table.                                                                                                        | Added a transactional up/down migration creating the table.                                                                           |
+| `Genre`         | Entity and API existed, but the original SQL baseline had no `genres` table.                                                                                        | Added a transactional up/down migration creating the table.                                                                           |
 | `User`          | SQL text columns are `NVARCHAR` with explicit lengths; model used unbounded `VARCHAR`. SQL default role was `user`, while application registrations use `customer`. | Aligned types/lengths and migrated the default to `customer`.                                                                         |
 | `Movie`         | Text types/lengths differed; `description`, `genre`, and `release_date` are nullable in SQL but non-nullable in metadata.                                           | Aligned types, lengths, and nullable flags.                                                                                           |
 | `Theater`       | SQL uses bounded `NVARCHAR`; `address` and `city` are nullable in SQL.                                                                                              | Aligned types, lengths, and nullable flags.                                                                                           |

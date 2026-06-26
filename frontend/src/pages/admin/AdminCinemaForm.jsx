@@ -1,105 +1,118 @@
-// frontend/src/pages/admin/AdminCinemaForm.jsx
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save } from 'lucide-react';
+import React, { useEffect, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Save } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { useNavigate, useParams } from "react-router-dom";
+import FormAlert from "../../components/common/FormAlert";
+import { catalogService } from "../../services/catalogService";
+import { queryKeys } from "../../services/queryKeys";
+import { applyBackendErrors } from "../../validation/formErrors";
+import { cinemaSchema } from "../../validation/schemas";
+
+const emptyForm = { name: "", address: "", city: "", phone: "" };
+const fields = [
+  ["name", "Tên rạp *"],
+  ["address", "Địa chỉ"],
+  ["city", "Thành phố"],
+  ["phone", "Số điện thoại"],
+];
 
 const AdminCinemaForm = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    name: '',
-    address: '',
-    city: '',
-    phone: ''
+  const queryClient = useQueryClient();
+  const [formError, setFormError] = useState("");
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setError,
+    setFocus,
+    formState: { errors, isSubmitting },
+  } = useForm({
+    resolver: zodResolver(cinemaSchema),
+    defaultValues: emptyForm,
+    shouldFocusError: true,
   });
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    alert('Tính năng đang phát triển!');
-    navigate('/admin/cinemas');
-  };
+  const cinemaQuery = useQuery({
+    queryKey: queryKeys.cinemas.detail(id),
+    queryFn: () => catalogService.getCinemaById(id),
+    enabled: Boolean(id),
+  });
+  useEffect(() => {
+    if (!cinemaQuery.data) return;
+    const { name, address, city, phone } = cinemaQuery.data;
+    reset({ name, address: address || "", city: city || "", phone: phone || "" });
+  }, [cinemaQuery.data, reset]);
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+  const mutation = useMutation({
+    mutationFn: (data) =>
+      id ? catalogService.updateCinema(id, data) : catalogService.createCinema(data),
+  });
+  const submit = async (data) => {
+    setFormError("");
+    try {
+      await mutation.mutateAsync(data);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.cinemas.all });
+      navigate("/admin/cinemas");
+    } catch (error) {
+      setFormError(
+        applyBackendErrors(error, {
+          setError,
+          setFocus,
+          allowedFields: fields.map(([name]) => name),
+        }),
+      );
+    }
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex items-center gap-4 mb-6">
-        <button
-          onClick={() => navigate('/admin/cinemas')}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-        >
-          <ArrowLeft className="w-6 h-6" />
+    <main className="mx-auto max-w-4xl p-6">
+      <div className="mb-6 flex items-center gap-4">
+        <button type="button" aria-label="Quay lại" onClick={() => navigate("/admin/cinemas")}>
+          <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="text-2xl font-bold">Thêm rạp mới</h1>
+        <h1 className="text-2xl font-bold">{id ? "Sửa rạp" : "Thêm rạp mới"}</h1>
       </div>
-
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl p-6 shadow-lg">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium mb-1">Tên rạp *</label>
-            <input
-              type="text"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
+      {cinemaQuery.isError ? (
+        <FormAlert message="Không thể tải thông tin rạp." />
+      ) : (
+        <form
+          onSubmit={handleSubmit(submit)}
+          noValidate
+          className="grid gap-5 rounded-xl bg-white p-6 shadow-lg dark:bg-gray-800 md:grid-cols-2"
+        >
+          {fields.map(([name, label]) => (
+            <label key={name} className="block">
+              <span className="mb-1 block">{label}</span>
+              <input
+                {...register(name)}
+                aria-invalid={Boolean(errors[name])}
+                className="w-full rounded-lg border p-2 dark:bg-gray-700"
+              />
+              {errors[name] && (
+                <span role="alert" className="mt-1 block text-sm text-red-500">
+                  {errors[name].message}
+                </span>
+              )}
+            </label>
+          ))}
+          <div className="md:col-span-2">
+            <FormAlert message={formError} />
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Số điện thoại</label>
-            <input
-              type="text"
-              name="phone"
-              value={formData.phone}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Địa chỉ</label>
-            <input
-              type="text"
-              name="address"
-              value={formData.address}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Thành phố</label>
-            <input
-              type="text"
-              name="city"
-              value={formData.city}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-4 mt-6 pt-6 border-t border-gray-200">
-          <button
-            type="button"
-            onClick={() => navigate('/admin/cinemas')}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-          >
-            Hủy
-          </button>
           <button
             type="submit"
-            className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center gap-2 hover:bg-green-700 transition-colors"
+            disabled={isSubmitting || mutation.isPending || cinemaQuery.isPending}
+            className="flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white disabled:opacity-50 md:col-span-2"
           >
-            <Save className="w-4 h-4" />
-            Lưu rạp
+            <Save className="h-4 w-4" />
+            {isSubmitting || mutation.isPending ? "Đang lưu..." : "Lưu rạp"}
           </button>
-        </div>
-      </form>
-    </div>
+        </form>
+      )}
+    </main>
   );
 };
 

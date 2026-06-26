@@ -17,6 +17,8 @@ const rateLimitHandler = (code, message) => (req, res) =>
     errors: [],
   });
 
+const isProduction = env.NODE_ENV === "production";
+
 const createApp = ({
   enableRequestLogging = env.NODE_ENV !== "test",
   dataSource = AppDataSource,
@@ -37,7 +39,7 @@ const createApp = ({
         callback(error);
       },
       credentials: true,
-      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization"],
     }),
   );
@@ -73,7 +75,7 @@ const createApp = ({
     "/api",
     rateLimit({
       windowMs: 15 * 60 * 1000,
-      max: 100,
+      max: isProduction ? 100 : 2000,
       standardHeaders: true,
       legacyHeaders: false,
       handler: rateLimitHandler("RATE_LIMITED", "Too many requests"),
@@ -81,10 +83,15 @@ const createApp = ({
   );
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 10,
+    max: isProduction ? 10 : 200,
     standardHeaders: true,
     legacyHeaders: false,
-    handler: rateLimitHandler("AUTH_RATE_LIMITED", "Too many authentication attempts"),
+    handler: rateLimitHandler(
+      "AUTH_RATE_LIMITED",
+      isProduction
+        ? "Too many authentication attempts"
+        : "Dev rate limit reached. Restart the backend or wait a few minutes.",
+    ),
   });
   app.use("/api/auth/login", authLimiter);
   app.use("/api/auth/register", authLimiter);

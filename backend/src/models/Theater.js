@@ -13,6 +13,7 @@ module.exports = new EntitySchema({
     address: { type: "nvarchar", length: 255, nullable: true },
     city: { type: "nvarchar", length: 50, nullable: true },
     phone: { type: "nvarchar", length: 20, nullable: true },
+    is_active: { type: "bit", default: true },
   },
   relations: {
     screens: {

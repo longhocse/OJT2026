@@ -1,126 +1,140 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { bookingSuccessStore } from "../booking/bookingSession";
+import { paymentService } from "../services/paymentService";
+
+const isValidBookingResult = (booking) =>
+  Boolean(
+    booking &&
+      typeof booking.bookingId === "string" &&
+      Array.isArray(booking.seats) &&
+      Number.isFinite(Number(booking.totalPrice)),
+  );
 
 const SuccessPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { booking, show, seats, total } = location.state || {};
-  const [countdown, setCountdown] = useState({ hours: 2, minutes: 30, seconds: 0 });
+  const [booking] = useState(() => location.state?.booking || bookingSuccessStore.load());
+  const [paymentStatus, setPaymentStatus] = useState(booking?.payment?.status || "pending");
+  const [ticket, setTicket] = useState(null);
+  const [actionError, setActionError] = useState("");
+  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
-    if (!booking) {
-      navigate("/");
-    }
-    // Simulate countdown to showtime
-    if (show?.start_time) {
-      const showTime = new Date(show.start_time);
-      const updateCountdown = () => {
-        const now = new Date();
-        const diff = showTime - now;
-        if (diff <= 0) {
-          setCountdown({ hours: 0, minutes: 0, seconds: 0 });
-          return;
-        }
-        const hours = Math.floor(diff / (1000 * 60 * 60));
-        const minutes = Math.floor((diff % (3600000)) / 60000);
-        const seconds = Math.floor((diff % 60000) / 1000);
-        setCountdown({ hours, minutes, seconds });
-      };
-      updateCountdown();
-      const timer = setInterval(updateCountdown, 1000);
-      return () => clearInterval(timer);
-    }
-  }, [booking, show, navigate]);
+    if (!isValidBookingResult(booking)) navigate("/my-bookings", { replace: true });
+  }, [booking, navigate]);
 
-  if (!booking) return null;
+  if (!isValidBookingResult(booking)) return null;
+
+  const leaveSuccessPage = (destination) => {
+    bookingSuccessStore.clear();
+    navigate(destination);
+  };
+  const completeMock = async () => {
+    setProcessing(true);
+    setActionError("");
+    try {
+      const result = await paymentService.completeMock(booking.payment.id);
+      setPaymentStatus(result.payment.status);
+      if (result.bookingStatus === "confirmed") {
+        setTicket(await paymentService.getTicket(booking.bookingId));
+      }
+    } catch (error) {
+      setActionError(error.response?.data?.message || "Không thể hoàn tất thanh toán.");
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen pt-24 pb-16 px-4 flex items-center justify-center">
+    <main className="flex min-h-screen items-center justify-center px-4 pb-16 pt-24">
       <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
+        initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="max-w-2xl w-full bg-surface-container rounded-2xl p-8 text-center"
+        className="w-full max-w-2xl rounded-2xl bg-surface-container p-8 text-center"
       >
-        <div className="w-20 h-20 bg-secondary/20 rounded-full flex items-center justify-center mx-auto mb-6">
+        <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-secondary/20">
           <span className="material-symbols-outlined text-5xl text-secondary">check_circle</span>
         </div>
-        <h1 className="text-3xl md:text-4xl font-bold mb-2">Booking Successful!</h1>
-        <p className="text-on-surface-variant mb-8">
-          Your tickets have been confirmed. Check your email for details.
+        <h1 className="mb-2 text-3xl font-bold md:text-4xl">Booking đã được tạo</h1>
+        <p className="mb-8 text-on-surface-variant">
+          Vé chỉ được xác nhận sau khi thanh toán thành công.
         </p>
 
-        {/* Countdown */}
-        <div className="bg-surface-container-high rounded-xl p-6 mb-8">
-          <p className="text-sm uppercase tracking-wider text-on-surface-variant mb-2">
-            Movie starts in
-          </p>
-          <p className="text-3xl font-mono font-bold text-primary">
-            {String(countdown.hours).padStart(2, "0")}h {String(countdown.minutes).padStart(2, "0")}m{" "}
-            {String(countdown.seconds).padStart(2, "0")}s
-          </p>
-        </div>
-
-        {/* Ticket Details */}
-        <div className="border-t border-white/10 pt-6 mb-8 text-left">
-          <h3 className="font-semibold mb-4">Ticket Details</h3>
-          <div className="space-y-2 text-sm">
-            <p>
-              <span className="text-on-surface-variant">Movie:</span> {show?.movie?.title}
-            </p>
-            <p>
-              <span className="text-on-surface-variant">Showtime:</span>{" "}
-              {new Date(show?.start_time).toLocaleString()}
-            </p>
-            <p>
-              <span className="text-on-surface-variant">Theater:</span> {show?.screen?.theater?.name}
-            </p>
-            <p>
-              <span className="text-on-surface-variant">Seats:</span>{" "}
-              {seats?.map((s) => `${s.row}${s.number}`).join(", ")}
-            </p>
-            <p>
-              <span className="text-on-surface-variant">Total:</span>{" "}
-              <span className="font-bold text-primary">{total?.toLocaleString()} VND</span>
-            </p>
-            <p>
-              <span className="text-on-surface-variant">Booking ID:</span> {booking.bookingId}
-            </p>
-          </div>
-        </div>
-
-        {/* QR Code Placeholder */}
-        <div className="flex justify-center mb-8">
-          <div className="w-32 h-32 bg-white p-2 rounded-lg">
-            <div className="w-full h-full bg-black flex items-center justify-center text-white text-xs">
-              QR Code
+        <section className="mb-8 border-t border-white/10 pt-6 text-left">
+          <h2 className="mb-4 font-semibold">Thông tin xác nhận từ backend</h2>
+          <dl className="space-y-3 text-sm">
+            <div>
+              <dt className="text-on-surface-variant">Booking ID</dt>
+              <dd className="break-all font-mono">{booking.bookingId}</dd>
             </div>
-          </div>
-        </div>
+            <div>
+              <dt className="text-on-surface-variant">Ghế</dt>
+              <dd>{booking.seats.join(", ") || "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-on-surface-variant">Tổng tiền chính thức</dt>
+              <dd className="text-xl font-bold text-primary">
+                {Number(booking.totalPrice).toLocaleString("vi-VN")} ₫
+              </dd>
+            </div>
+          </dl>
+          <p className="mt-4">
+            Trạng thái thanh toán: <strong>{paymentStatus}</strong>
+          </p>
+          {booking.payment?.provider === "mock" && paymentStatus === "pending" && (
+            <button
+              type="button"
+              disabled={processing}
+              onClick={completeMock}
+              className="mt-4 rounded-lg bg-green-600 px-5 py-2 text-white disabled:opacity-50"
+            >
+              {processing ? "Đang xử lý..." : "Thanh toán thử nghiệm"}
+            </button>
+          )}
+          {booking.payment?.provider === "cash" && paymentStatus === "pending" && (
+            <p className="mt-3 text-amber-400">Đang chờ nhân viên xác nhận thanh toán tiền mặt.</p>
+          )}
+          {actionError && (
+            <p role="alert" className="mt-3 text-red-400">
+              {actionError}
+            </p>
+          )}
+          {ticket && (
+            <div className="mt-5 rounded border p-3">
+              <p>
+                Mã vé: <strong>{ticket.ticketCode}</strong>
+              </p>
+              <textarea
+                readOnly
+                aria-label="QR vé"
+                value={ticket.qrPayload}
+                rows="4"
+                className="mt-2 w-full bg-transparent font-mono text-xs"
+              />
+            </div>
+          )}
+        </section>
 
-        {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+        <div className="flex flex-col justify-center gap-4 sm:flex-row">
           <button
-            onClick={() => navigate("/my-bookings")}
-            className="px-6 py-3 bg-primary text-white rounded-lg font-semibold hover:bg-primary/90"
+            type="button"
+            onClick={() => leaveSuccessPage("/my-bookings")}
+            className="rounded-lg bg-primary px-6 py-3 font-semibold text-white hover:bg-primary/90"
           >
-            My Bookings
+            Xem lịch sử booking
           </button>
           <button
-            onClick={() => navigate("/")}
-            className="px-6 py-3 border border-white/20 rounded-lg font-semibold hover:bg-white/5"
+            type="button"
+            onClick={() => leaveSuccessPage("/")}
+            className="rounded-lg border border-white/20 px-6 py-3 font-semibold hover:bg-white/5"
           >
-            Back to Home
-          </button>
-          <button
-            onClick={() => alert("Share feature coming soon")}
-            className="px-6 py-3 border border-white/20 rounded-lg font-semibold hover:bg-white/5"
-          >
-            Share
+            Về trang chủ
           </button>
         </div>
       </motion.div>
-    </div>
+    </main>
   );
 };
 

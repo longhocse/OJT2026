@@ -1,63 +1,87 @@
-// frontend/src/services/api.js
 import axios from "axios";
 import { store } from "../redux/store";
-import { logout } from "../redux/slices/authSlice";
+import { setCredentials } from "../redux/slices/authSlice";
+import { clearClientSession } from "./authSession";
+
+const DEVELOPMENT_API_URL = "http://localhost:5000/api";
+const SAME_ORIGIN_API_URL = "/api";
+
+const normalizeBaseUrl = (url) => url.replace(/\/+$/, "");
+
+const environmentApiUrl = process.env.REACT_APP_API_URL?.trim();
+
+export const API_BASE_URL = normalizeBaseUrl(
+  environmentApiUrl ||
+    (process.env.NODE_ENV === "development" ? DEVELOPMENT_API_URL : SAME_ORIGIN_API_URL),
+);
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
-  headers: { 
-    "Content-Type": "application/json" 
+  baseURL: API_BASE_URL,
+  headers: {
+    "Content-Type": "application/json",
   },
-  timeout: 10000, // 10 seconds timeout
+  timeout: 10000,
+  withCredentials: true,
 });
 
-// Request interceptor
-api.interceptors.request.use(
-  (config) => {
-    console.log("Request:", config.method.toUpperCase(), config.url);
-    const state = store.getState();
-    const token = state.auth?.token;
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-      console.log("Token added to request");
-    }
-    return config;
-  },
-  (error) => {
-    console.error("Request interceptor error:", error);
-    return Promise.reject(error);
-  }
-);
+let unauthorizedHandler = null;
 
-// Response interceptor
-api.interceptors.response.use(
-  (response) => {
-    console.log("Response:", response.status, response.config.url);
-    return response;
-  },
-  (error) => {
-    console.error("Response error:", error);
-    
-    // Log chi tiết lỗi
-    if (error.response) {
-      console.error("Error response data:", error.response.data);
-      console.error("Error response status:", error.response.status);
-      console.error("Error response headers:", error.response.headers);
-    } else if (error.request) {
-      console.error("No response received:", error.request);
-    } else {
-      console.error("Error message:", error.message);
-    }
-    
-    // Xử lý 401 Unauthorized
-    if (error.response?.status === 401) {
-      console.log("Unauthorized, logging out...");
-      store.dispatch(logout());
-      window.location.href = "/login";
-    }
-    
-    return Promise.reject(error);
+export const setUnauthorizedHandler = (handler) => {
+  unauthorizedHandler = typeof handler === "function" ? handler : null;
+
+  return () => {
+    if (unauthorizedHandler === handler) unauthorizedHandler = null;
+  };
+};
+
+const isCredentialRequest = (url = "") =>
+  [
+    "/auth/login",
+    "/auth/register",
+    "/auth/refresh",
+    "/auth/forgot-password",
+    "/auth/reset-password",
+  ].some((path) => url.endsWith(path));
+
+api.interceptors.request.use((config) => {
+  const token = store.getState().auth?.token;
+
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
   }
-);
+
+  return config;
+});
+
+let refreshPromise = null;
+
+export const handleResponseError = async (error) => {
+  const status = error.response?.status;
+
+  if (status === 401 && !isCredentialRequest(error.config?.url) && !error.config?._retried) {
+    try {
+      refreshPromise ||= axios
+        .post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true, timeout: 10000 })
+        .then((response) => response.data)
+        .finally(() => {
+          refreshPromise = null;
+        });
+      const session = await refreshPromise;
+      store.dispatch(setCredentials(session));
+      error.config._retried = true;
+      error.config.headers = error.config.headers || {};
+      error.config.headers.Authorization = `Bearer ${session.token}`;
+      return api.request(error.config);
+    } catch (_refreshError) {
+      void clearClientSession();
+      unauthorizedHandler?.();
+    }
+  }
+
+  return Promise.reject(error);
+};
+
+api.interceptors.response.use((response) => response, handleResponseError);
 
 export default api;

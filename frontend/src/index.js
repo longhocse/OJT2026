@@ -1,15 +1,15 @@
 // frontend/src/index.js
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { Provider } from 'react-redux';
-import { PersistGate } from 'redux-persist/integration/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { Provider } from "react-redux";
+import { PersistGate } from "redux-persist/integration/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import App from './App';
-import './index.css';
-import reportWebVitals from './reportWebVitals';
+import App from "./App";
+import "./index.css";
+import reportWebVitals from "./reportWebVitals";
 
-import { store, persistor } from './redux/store';
+import { store, persistor } from "./redux/store";
 
 // Tạo QueryClient
 const queryClient = new QueryClient({
@@ -21,7 +21,7 @@ const queryClient = new QueryClient({
   },
 });
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
+const root = ReactDOM.createRoot(document.getElementById("root"));
 
 root.render(
   <React.StrictMode>
@@ -32,7 +32,7 @@ root.render(
         </QueryClientProvider>
       </PersistGate>
     </Provider>
-  </React.StrictMode>
+  </React.StrictMode>,
 );
 
 reportWebVitals();

@@ -1,44 +1,43 @@
-// frontend/src/redux/slices/authSlice.js
 import { createSlice } from "@reduxjs/toolkit";
 
-const initialState = {
-  user: JSON.parse(localStorage.getItem("user")) || null,
-  token: localStorage.getItem("token") || null,
-  isAuthenticated: !!localStorage.getItem("token"),
-  loading: false,
+export const initialAuthState = {
+  user: null,
+  token: null,
+  isAuthenticated: false,
+  verificationStatus: "idle",
+};
+
+const clearSession = (state) => {
+  state.user = null;
+  state.token = null;
+  state.isAuthenticated = false;
+  state.verificationStatus = "anonymous";
 };
 
 const authSlice = createSlice({
   name: "auth",
-  initialState,
+  initialState: initialAuthState,
   reducers: {
     setCredentials: (state, action) => {
       state.user = action.payload.user;
       state.token = action.payload.token;
       state.isAuthenticated = true;
-      
-      // Lưu vào localStorage
-      localStorage.setItem("user", JSON.stringify(action.payload.user));
-      localStorage.setItem("token", action.payload.token);
-      
-      console.log("✅ Auth state updated:", {
-        user: action.payload.user,
-        role: action.payload.user?.role
-      });
+      state.verificationStatus = "authenticated";
     },
-    logout: (state) => {
+    startSessionVerification: (state) => {
       state.user = null;
-      state.token = null;
       state.isAuthenticated = false;
-      
-      localStorage.removeItem("user");
-      localStorage.removeItem("token");
+      state.verificationStatus = "verifying";
     },
-    setLoading: (state, action) => {
-      state.loading = action.payload;
+    sessionVerified: (state, action) => {
+      state.user = action.payload;
+      state.isAuthenticated = true;
+      state.verificationStatus = "authenticated";
     },
+    logout: clearSession,
   },
 });
 
-export const { setCredentials, logout, setLoading } = authSlice.actions;
+export const { setCredentials, startSessionVerification, sessionVerified, logout } =
+  authSlice.actions;
 export default authSlice.reducer;

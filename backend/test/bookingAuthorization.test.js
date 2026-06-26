@@ -128,6 +128,7 @@ test("booking authorization prevents IDOR", { concurrency: false }, async (t) =>
               },
             };
           }
+          if (name === "Payment") return { findOne: async () => null };
           throw new Error(`Unexpected repository: ${name}`);
         },
         save: async (entity) => entity,

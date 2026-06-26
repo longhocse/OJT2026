@@ -13,6 +13,10 @@ const Booking = require("../models/Booking");
 const BookingSeat = require("../models/BookingSeat");
 const Review = require("../models/Review");
 const ShowSeatState = require("../models/ShowSeatState");
+const Payment = require("../models/Payment");
+const RefreshToken = require("../models/RefreshToken");
+const PasswordResetToken = require("../models/PasswordResetToken");
+const AuditLog = require("../models/AuditLog");
 
 const AppDataSource = new DataSource({
   type: "mssql",
@@ -43,6 +47,10 @@ const AppDataSource = new DataSource({
     BookingSeat,
     Review,
     ShowSeatState,
+    Payment,
+    RefreshToken,
+    PasswordResetToken,
+    AuditLog,
   ],
 
   synchronize: false, // Không tự động sync để tránh mất dữ liệu

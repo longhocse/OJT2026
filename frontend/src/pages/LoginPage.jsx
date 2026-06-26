@@ -1,285 +1,179 @@
-// frontend/src/pages/LoginPage.jsx
 import React, { useState } from "react";
-import { useDispatch } from "react-redux";
-import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import { Eye, EyeOff, Mail, Lock, User, Phone } from "lucide-react";
-import { authService } from "../services/authService";
-import { setCredentials } from "../redux/slices/authSlice";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Eye, EyeOff, Lock, Mail, Phone, User } from "lucide-react";
+import FormAlert from "../components/common/FormAlert";
+import useAuth from "../hooks/useAuth";
+import { applyBackendErrors } from "../validation/formErrors";
+import { loginSchema, registerSchema } from "../validation/schemas";
 
 const LoginPage = () => {
-  const [isLogin, setIsLogin] = useState(true);
+  const [mode, setMode] = useState("login");
+  return (
+    <main className="flex min-h-[calc(100vh-64px)] items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl dark:bg-gray-800">
+        <div className="mb-8 text-center">
+          <h1 className="text-2xl font-bold">{mode === "login" ? "Đăng nhập" : "Đăng ký"}</h1>
+          <p className="mt-2 text-gray-500">
+            {mode === "login" ? "Chào mừng bạn trở lại!" : "Tạo tài khoản để đặt vé."}
+          </p>
+        </div>
+        <AuthForm key={mode} mode={mode} />
+        {mode === "login" && (
+          <button
+            type="button"
+            onClick={() => (window.location.href = "/forgot-password")}
+            className="mt-4 w-full text-sm text-blue-600"
+          >
+            Quên mật khẩu?
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setMode((value) => (value === "login" ? "register" : "login"))}
+          className="mt-6 w-full text-sm text-blue-600"
+        >
+          {mode === "login" ? "Chưa có tài khoản? Đăng ký ngay" : "Đã có tài khoản? Đăng nhập"}
+        </button>
+      </div>
+    </main>
+  );
+};
+
+const AuthForm = ({ mode }) => {
+  const isLogin = mode === "login";
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    email: "customer1@gmail.com",
-    password: "123456",
-    name: "",
-    phone: "",
-    confirmPassword: ""
-  });
-  
-  const dispatch = useDispatch();
+  const [formError, setFormError] = useState("");
+  const { login, register: registerUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const {
+    register,
+    handleSubmit,
+    setError,
+    setFocus,
+    formState: { errors, isSubmitting },
+  } = useForm({
+    resolver: zodResolver(isLogin ? loginSchema : registerSchema),
+    defaultValues: { email: "", password: "", name: "", phone: "", confirmPassword: "" },
+    shouldFocusError: true,
+  });
 
-  // Xử lý thay đổi input
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
-  };
-
-  // Xử lý submit form
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    console.log("🚀 Form submitted!");
-    console.log("📝 Form data:", formData);
-    
-    setError("");
-    setLoading(true);
-
+  const submit = async (values) => {
+    setFormError("");
     try {
-      let response;
-
-      if (isLogin) {
-        // Kiểm tra email và password không được rỗng
-        if (!formData.email || !formData.password) {
-          throw new Error("Vui lòng nhập email và mật khẩu");
-        }
-        
-        console.log("🔐 Attempting login...");
-        response = await authService.login({
-          email: formData.email,
-          password: formData.password,
-        });
-      } else {
-        // Kiểm tra confirm password
-        if (formData.password !== formData.confirmPassword) {
-          throw new Error("Mật khẩu xác nhận không khớp");
-        }
-        
-        console.log("📝 Attempting register...");
-        response = await authService.register({
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone,
-          password: formData.password,
-        });
-      }
-
-      console.log("✅ Response:", response);
-
-      if (!response || !response.user || !response.token) {
-        throw new Error("Invalid response from server");
-      }
-
-      // Dispatch credentials
-      dispatch(
-        setCredentials({
-          user: response.user,
-          token: response.token,
-        })
+      const response = isLogin ? await login(values) : await registerUser(values);
+      const requested = location.state?.from;
+      navigate(
+        typeof requested === "string" ? requested : response.user.role === "admin" ? "/admin" : "/",
+        { replace: true },
       );
-
-      console.log("✅ Login successful! Redirecting...");
-      navigate("/");
-
-    } catch (err) {
-      console.error("❌ Login error:", err);
-      
-      let errorMessage = "Đã có lỗi xảy ra. Vui lòng thử lại.";
-      
-      if (err.response) {
-        console.error("Server response:", err.response.data);
-        if (err.response.status === 401) {
-          errorMessage = "Email hoặc mật khẩu không đúng";
-        } else if (err.response.data?.message) {
-          errorMessage = err.response.data.message;
-        }
-      } else if (err.request) {
-        errorMessage = "Không thể kết nối đến server. Vui lòng kiểm tra kết nối.";
-      } else {
-        errorMessage = err.message || "Đã có lỗi xảy ra";
-      }
-      
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Test API connection
-  const testApiConnection = async () => {
-    try {
-      console.log("Testing API connection...");
-      const response = await fetch("http://localhost:5000/api/health");
-      const data = await response.json();
-      console.log("API health check:", data);
-      alert("✅ Kết nối API thành công!");
     } catch (error) {
-      console.error("❌ API connection failed:", error);
-      alert("❌ Không thể kết nối đến API server!\n\nVui lòng kiểm tra:\n1. Backend đang chạy tại http://localhost:5000\n2. CORS đã được cấu hình đúng");
+      setFormError(
+        applyBackendErrors(error, {
+          setError,
+          setFocus,
+          allowedFields: isLogin ? ["email", "password"] : ["email", "password", "name", "phone"],
+        }),
+      );
     }
   };
 
   return (
-    <div className="min-h-[calc(100vh-64px)] flex items-center justify-center py-12 px-4">
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8"
+    <form onSubmit={handleSubmit(submit)} className="space-y-4" noValidate>
+      <FormAlert message={formError} />
+      {!isLogin && (
+        <Field
+          label="Họ tên"
+          icon={User}
+          error={errors.name}
+          inputProps={register("name")}
+          autoComplete="name"
+        />
+      )}
+      {!isLogin && (
+        <Field
+          label="Số điện thoại"
+          icon={Phone}
+          error={errors.phone}
+          inputProps={register("phone")}
+          autoComplete="tel"
+        />
+      )}
+      <Field
+        label="Email"
+        icon={Mail}
+        error={errors.email}
+        inputProps={register("email")}
+        type="email"
+        autoComplete="username"
+      />
+      <label className="block text-sm font-medium">
+        <span className="mb-1 block">Mật khẩu</span>
+        <span className="relative block">
+          <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+          <input
+            {...register("password")}
+            type={showPassword ? "text" : "password"}
+            autoComplete={isLogin ? "current-password" : "new-password"}
+            aria-invalid={Boolean(errors.password)}
+            className="w-full rounded-lg border py-2 pl-10 pr-10 dark:bg-gray-700"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((value) => !value)}
+            aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+            className="absolute right-3 top-1/2 -translate-y-1/2"
+          >
+            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+          </button>
+        </span>
+        <FieldError error={errors.password} />
+      </label>
+      {!isLogin && (
+        <Field
+          label="Xác nhận mật khẩu"
+          icon={Lock}
+          error={errors.confirmPassword}
+          inputProps={register("confirmPassword")}
+          type={showPassword ? "text" : "password"}
+          autoComplete="new-password"
+        />
+      )}
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        className="w-full rounded-lg bg-blue-600 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <div className="text-center mb-8">
-          <h1 className="font-heading text-2xl font-bold">{isLogin ? "Đăng nhập" : "Đăng ký"}</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
-            {isLogin ? "Chào mừng bạn trở lại!" : "Tạo tài khoản để đặt vé dễ dàng hơn"}
-          </p>
-        </div>
-
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-sm">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
-            <>
-              <div>
-                <label className="block text-sm font-medium mb-1">Họ tên</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
-                    placeholder="Nguyễn Văn A"
-                    required={!isLogin}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Số điện thoại</label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
-                    placeholder="0912345678"
-                    required={!isLogin}
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium mb-1">Email</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
-                placeholder="you@example.com"
-                required
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">Mật khẩu</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type={showPassword ? "text" : "password"}
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                className="w-full pl-10 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
-                placeholder="••••••"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2"
-              >
-                {showPassword ? (
-                  <EyeOff className="w-5 h-5 text-gray-400" />
-                ) : (
-                  <Eye className="w-5 h-5 text-gray-400" />
-                )}
-              </button>
-            </div>
-          </div>
-
-          {!isLogin && (
-            <div>
-              <label className="block text-sm font-medium mb-1">Xác nhận mật khẩu</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
-                  placeholder="••••••"
-                  required={!isLogin}
-                />
-              </div>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
-          >
-            {loading ? "Đang xử lý..." : isLogin ? "Đăng nhập" : "Đăng ký"}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => {
-              setIsLogin(!isLogin);
-              setError("");
-              setFormData({
-                ...formData,
-                name: "",
-                phone: "",
-                confirmPassword: ""
-              });
-            }}
-            className="text-blue-600 hover:text-blue-700 text-sm"
-          >
-            {isLogin ? "Chưa có tài khoản? Đăng ký ngay" : "Đã có tài khoản? Đăng nhập"}
-          </button>
-        </div>
-
-        <div className="mt-4 text-center">
-          <button
-            onClick={testApiConnection}
-            className="text-gray-500 hover:text-gray-700 text-xs underline"
-          >
-            Kiểm tra kết nối API
-          </button>
-        </div>
-      </motion.div>
-    </div>
+        {isSubmitting ? "Đang xử lý..." : isLogin ? "Đăng nhập" : "Đăng ký"}
+      </button>
+    </form>
   );
 };
+
+const Field = ({ label, icon: Icon, error, inputProps, type = "text", ...rest }) => (
+  <label className="block text-sm font-medium">
+    <span className="mb-1 block">{label}</span>
+    <span className="relative block">
+      <Icon className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+      <input
+        {...inputProps}
+        {...rest}
+        type={type}
+        aria-invalid={Boolean(error)}
+        className="w-full rounded-lg border py-2 pl-10 pr-3 dark:bg-gray-700"
+      />
+    </span>
+    <FieldError error={error} />
+  </label>
+);
+
+const FieldError = ({ error }) =>
+  error ? (
+    <span role="alert" className="mt-1 block text-sm text-red-500">
+      {error.message}
+    </span>
+  ) : null;
 
 export default LoginPage;

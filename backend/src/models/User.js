@@ -32,6 +32,10 @@ module.exports = new EntitySchema({
       length: 20,
       default: "customer",
     },
+    is_active: {
+      type: "bit",
+      default: true,
+    },
     created_at: {
       type: "datetime",
       createDate: true,
@@ -45,6 +49,16 @@ module.exports = new EntitySchema({
     },
     reviews: {
       target: "Review",
+      type: "one-to-many",
+      inverseSide: "user",
+    },
+    refreshTokens: {
+      target: "RefreshToken",
+      type: "one-to-many",
+      inverseSide: "user",
+    },
+    passwordResetTokens: {
+      target: "PasswordResetToken",
       type: "one-to-many",
       inverseSide: "user",
     },

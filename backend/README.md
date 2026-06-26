@@ -31,6 +31,14 @@ Fill `.env` before starting. The process exits with the names of invalid or miss
 | `DB_TRUST_SERVER_CERTIFICATE`               | Development convenience; use `false` with a trusted production certificate |
 | `JWT_SECRET`, `JWT_REFRESH_SECRET`          | Independent random secrets, at least 32 characters                         |
 | `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN`  | Token lifetime values                                                      |
+| `PASSWORD_RESET_TTL_MINUTES`                | Password reset token lifetime, default `30` minutes                        |
+| `SHOW_CLEANING_BUFFER_MINUTES`              | Minimum room cleaning gap, default `15` minutes                            |
+| `PAYMENT_PROVIDER_MODE`                     | Local provider mode; currently `mock`                                      |
+| `PAYMENT_WEBHOOK_SECRET`                    | HMAC secret used to verify payment callbacks                               |
+| `TICKET_QR_SECRET`                          | Independent HMAC secret used to sign ticket QR payloads                    |
+| `PAYMENT_PENDING_TTL_MINUTES`               | Online payment reservation lifetime                                        |
+| `CASH_PAYMENT_TTL_MINUTES`                  | Cash confirmation reservation lifetime                                     |
+| `BOOKING_EXPIRY_INTERVAL_MS`                | Pending-booking expiry worker interval                                     |
 | `CORS_ORIGINS`                              | Comma-separated exact browser origins; `*` is rejected in production       |
 
 Never commit `.env`. Inject production secrets through the deployment platform's secret manager and rotate any secret that has appeared in Git history.
@@ -56,13 +64,23 @@ For an existing database, back up first and execute each `*.up.sql` in `migratio
 sqlcmd -S localhost -U sa -d MovieTapDB -C -b -i migrations/20260621_align_entity_schema.up.sql
 ```
 
-For a new empty database, use `docker/sqlserver/bootstrap.sql`. Optional non-user sample data is in `docker/sqlserver/seed.sql`:
+For the local SQL Server database used by this repository, execute
+`MovieTapDB_FULL_RESET_CURRENT.sql` once to recreate the current schema and demo
+data:
+
+```powershell
+sqlcmd -S localhost -U sa -C -b -i MovieTapDB_FULL_RESET_CURRENT.sql
+```
+
+For Docker-only bootstrap flows, `docker/sqlserver/bootstrap.sql` remains
+idempotent. Optional non-user sample data is in `docker/sqlserver/seed.sql`:
 
 ```powershell
 sqlcmd -S localhost -U sa -d MovieTapDB -C -b -i docker/sqlserver/seed.sql
 ```
 
-`new.sql` is a legacy destructive development script and must not be run against shared or production data.
+Do not enable TypeORM `synchronize`; all incremental database changes should go
+through the migration files in this folder.
 
 ## Tests and quality checks
 
@@ -77,18 +95,42 @@ npm audit --audit-level=high
 
 Tests use `MovieTapTestDB` configuration and do not listen on a real port. Important controller/middleware coverage is gated at 80% lines and functions.
 
+SQL Server integration tests are opt-in so they cannot accidentally mutate a developer database. Apply migrations to a disposable/staging database, set the normal DB environment variables to that database, then run:
+
+```powershell
+$env:RUN_SQLSERVER_INTEGRATION = '1'
+npm test
+```
+
+Those tests verify migrated tables/columns, the duplicate-seat constraint and the room-overlap query against real SQL Server.
+
 ## API overview
 
 - `GET /health` — process liveness; does not depend on SQL Server
 - `GET /ready` — readiness; returns `503` unless a database query succeeds
-- `/api/auth` — register, login, current profile
-- `/api/users` — admin-only paginated user list
+- `/api/auth` — register, login, refresh rotation, logout revoke, profile, change/forgot/reset password
+- `/api/users` — admin-only paginated user list and role/lock management
 - `/api/movies`, `/api/genres`, `/api/cinemas`, `/api/rooms`, `/api/shows` — catalog and admin CRUD
+- Admin delete of referenced movies/cinemas/rooms deactivates the resource (`is_active = 0`) instead of hard-deleting historical data.
+- `POST/PUT /api/rooms` — admin-only transactional room and seat-layout writes; totals are derived server-side
+- `/api/admin/shows` — paginated show scheduling, conflict checks, cancellation and safe deletion
+- `/api/admin/bookings`, `/api/admin/dashboard/stats` — booking operations, refunds and dashboard metrics
+- `/api/admin/audit-logs` — paginated audit trail for important admin actions
 - `/api/bookings` — authenticated booking, ownership checks, seat lock/unlock; `/me` returns the current user's bookings
 - `/api/recommendations` — authenticated personal recommendations; `/trending` is public
-- `/api/movies/:movieId/reviews` — review list and authenticated create/update
+- `/api/movies/:movieId/reviews` — review list, authenticated create/update/delete, and admin moderation
 
 Authenticated calls use `Authorization: Bearer <token>`. Errors use `{ code, message, errors }`; responses carry `X-Request-Id` for log correlation.
+
+## Payment and ticket endpoints
+
+- `POST /api/payments/webhooks/mock` verifies a signed provider callback.
+- `GET /api/payments/:id` and `POST /api/payments/:id/mock-complete` support the local flow.
+- `/api/admin/payments` supports search, cash confirmation, and refunds.
+- `GET /api/bookings/:id/ticket` returns an owner-authorized signed ticket payload.
+- `POST /api/admin/tickets/check-in` performs idempotent admin check-in.
+
+See `docs/payment-ticket-lifecycle.md` for state transitions and operational rules.
 
 ## Production operation
 

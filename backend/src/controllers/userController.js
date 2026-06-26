@@ -1,5 +1,8 @@
 const { AppDataSource } = require("../config/database");
 const { Like } = require("typeorm");
+const { AppError } = require("../utils/AppError");
+const { revokeUserSessions } = require("../services/authTokenService");
+const { recordAuditLog } = require("../services/auditLogService");
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -17,6 +20,7 @@ const toPublicUser = (user) => ({
   email: user.email,
   phone: user.phone,
   role: user.role,
+  is_active: user.is_active !== false,
   created_at: user.created_at,
 });
 
@@ -36,6 +40,7 @@ exports.getAllUsers = async (req, res) => {
       email: true,
       phone: true,
       role: true,
+      is_active: true,
       created_at: true,
     },
     where,
@@ -54,4 +59,56 @@ exports.getAllUsers = async (req, res) => {
       pages: Math.ceil(total / limit),
     },
   });
+};
+
+exports.updateUserAccess = async (req, res) => {
+  const runner = AppDataSource.createQueryRunner();
+  await runner.connect();
+  await runner.startTransaction("SERIALIZABLE");
+  try {
+    const repository = runner.manager.getRepository("User");
+    const user = await repository.findOne({
+      where: { id: req.params.id },
+      lock: { mode: "pessimistic_write" },
+    });
+    if (!user) throw new AppError(404, "USER_NOT_FOUND", "User not found");
+    const update = res.locals.validated.body;
+    const removesActiveAdmin =
+      user.role === "admin" &&
+      user.is_active !== false &&
+      (update.role === "customer" || update.is_active === false);
+    if (removesActiveAdmin) {
+      const activeAdmins = await repository.count({ where: { role: "admin", is_active: true } });
+      if (activeAdmins <= 1) {
+        throw new AppError(
+          409,
+          "LAST_ADMIN_REQUIRED",
+          "The final active admin cannot be demoted or locked",
+        );
+      }
+    }
+    const accessChanged =
+      (update.role && update.role !== user.role) ||
+      (typeof update.is_active === "boolean" && update.is_active !== user.is_active);
+    Object.assign(user, update);
+    await repository.save(user);
+    if (accessChanged) await revokeUserSessions(runner.manager, user.id);
+    await runner.commitTransaction();
+    await recordAuditLog(req, {
+      action: "user.update_access",
+      resourceType: "User",
+      resourceId: user.id,
+      metadata: {
+        role: user.role,
+        is_active: user.is_active !== false,
+        sessionsRevoked: accessChanged,
+      },
+    });
+    res.json(toPublicUser(user));
+  } catch (error) {
+    if (runner.isTransactionActive) await runner.rollbackTransaction();
+    throw error;
+  } finally {
+    await runner.release();
+  }
 };

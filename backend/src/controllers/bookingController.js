@@ -4,6 +4,10 @@ const { In } = require("typeorm");
 const { randomUUID } = require("node:crypto");
 const { AppError } = require("../utils/AppError");
 const logger = require("../utils/logger");
+const { applyRefundSummary, calculateRefund } = require("../utils/refundPolicy");
+const { getProviderForMethod } = require("../payments/providerRegistry");
+const { env } = require("../config/env");
+const { applyPaymentRefund } = require("../services/paymentLifecycleService");
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -34,6 +38,17 @@ const setStateAvailable = (state) => {
   state.lock_token = null;
   state.locked_until = null;
   state.booking = null;
+};
+
+const saveWithRepository = (manager, repository, entity) =>
+  typeof repository?.save === "function" ? repository.save(entity) : manager.save(entity);
+
+const getRepositoryOrNull = (manager, name) => {
+  try {
+    return manager.getRepository(name);
+  } catch (_error) {
+    return null;
+  }
 };
 
 const rollbackQuietly = async (queryRunner, context) => {
@@ -102,6 +117,7 @@ const findBookingsForUser = async (userId) => {
       bookingSeats: {
         seat: true,
       },
+      payment: true,
     },
     order: { created_at: "DESC" },
   });
@@ -124,6 +140,7 @@ exports.createBooking = async (req, res, next) => {
     const bookingRepo = queryRunner.manager.getRepository("Booking");
     const bookingSeatRepo = queryRunner.manager.getRepository("BookingSeat");
     const seatStateRepo = queryRunner.manager.getRepository("ShowSeatState");
+    const paymentRepo = queryRunner.manager.getRepository("Payment");
 
     const show = await showRepo.findOne({
       where: { id: showId },
@@ -133,6 +150,9 @@ exports.createBooking = async (req, res, next) => {
       },
     });
     if (!show) throw new BookingRequestError(404, "Show not found");
+    if (show.status === "cancelled") {
+      throw new BookingRequestError(409, "Cannot book a cancelled show");
+    }
 
     const startTime = new Date(show.start_time);
     if (Number.isNaN(startTime.getTime()) || startTime <= new Date()) {
@@ -148,6 +168,9 @@ exports.createBooking = async (req, res, next) => {
     }
     if (seats.some((seat) => String(seat.screen?.id) !== String(show.screen?.id))) {
       throw new BookingRequestError(400, "All seats must belong to the show's screen");
+    }
+    if (seats.some((seat) => seat.status === "disabled")) {
+      throw new BookingRequestError(409, "Disabled seats cannot be booked");
     }
 
     const stateBySeatId = new Map();
@@ -185,10 +208,20 @@ exports.createBooking = async (req, res, next) => {
       user: { id: userId },
       show: { id: showId },
       total_price: totalPrice,
-      status: "confirmed",
+      status: "pending_payment",
       payment_method: paymentMethod,
+      payment_status: "pending",
+      refunded_amount: 0,
+      expires_at: new Date(
+        Date.now() +
+          (paymentMethod === "cash"
+            ? env.CASH_PAYMENT_TTL_MINUTES
+            : env.PAYMENT_PENDING_TTL_MINUTES) *
+            60000,
+      ),
+      ticket_code: `MT-${randomUUID().replaceAll("-", "").toUpperCase()}`,
     });
-    await queryRunner.manager.save(booking);
+    await saveWithRepository(queryRunner.manager, bookingRepo, booking);
 
     for (const seat of seats) {
       let price = basePrice;
@@ -200,7 +233,7 @@ exports.createBooking = async (req, res, next) => {
         price,
         status: "confirmed",
       });
-      await queryRunner.manager.save(bookingSeat);
+      await saveWithRepository(queryRunner.manager, bookingSeatRepo, bookingSeat);
 
       const state = stateBySeatId.get(String(seat.id).toLowerCase());
       state.status = "booked";
@@ -208,8 +241,23 @@ exports.createBooking = async (req, res, next) => {
       state.lockedByUser = null;
       state.lock_token = null;
       state.locked_until = null;
-      await queryRunner.manager.save(state);
+      await saveWithRepository(queryRunner.manager, seatStateRepo, state);
     }
+
+    const provider = getProviderForMethod(paymentMethod);
+    const payment = paymentRepo.create({
+      booking,
+      provider: paymentMethod === "cash" ? "cash" : "mock",
+      amount: totalPrice,
+      status: "pending",
+      idempotency_key: randomUUID(),
+      refunded_amount: 0,
+    });
+    await paymentRepo.save(payment);
+    const intent = await provider.createIntent({ paymentId: payment.id, amount: totalPrice });
+    payment.provider = intent.provider;
+    payment.provider_transaction_id = intent.transactionId;
+    await paymentRepo.save(payment);
 
     await queryRunner.commitTransaction();
     transactionStarted = false;
@@ -217,7 +265,16 @@ exports.createBooking = async (req, res, next) => {
       message: "Booking created",
       bookingId: booking.id,
       totalPrice,
-      seats: seats.map((s) => `${s.row}${s.number}`),
+      seats: seats.map((s) => `${String(s.row).trim()}${s.number}`),
+      status: booking.status,
+      expiresAt: booking.expires_at,
+      ticketCode: booking.ticket_code,
+      payment: {
+        id: payment.id,
+        provider: payment.provider,
+        status: payment.status,
+        checkoutUrl: intent.checkoutUrl,
+      },
     });
   } catch (error) {
     if (transactionStarted) {
@@ -258,6 +315,7 @@ exports.getBookingById = async (req, res) => {
       bookingSeats: {
         seat: true,
       },
+      payment: true,
     },
   });
   if (!booking) throw new AppError(404, "BOOKING_NOT_FOUND", "Booking not found");
@@ -309,6 +367,11 @@ exports.cancelBooking = async (req, res, next) => {
     if (!isAdmin(req.user) && !ownsBooking(booking, req.user)) {
       throw new BookingRequestError(403, "Forbidden");
     }
+    if (booking.status === "cancelled") {
+      throw new BookingRequestError(409, "Booking is already cancelled");
+    }
+    if (!["pending_payment", "confirmed"].includes(booking.status))
+      throw new BookingRequestError(409, "Booking cannot be cancelled in its current status");
 
     const showTime = new Date(booking.show.start_time);
     const hoursDiff = (showTime - new Date()) / (1000 * 60 * 60);
@@ -316,22 +379,38 @@ exports.cancelBooking = async (req, res, next) => {
       throw new BookingRequestError(400, "Cannot cancel within 2 hours");
     }
 
+    const refundAmount =
+      booking.status === "pending_payment" ? 0 : calculateRefund(booking.total_price, showTime);
     booking.status = "cancelled";
-    await queryRunner.manager.save(booking);
+    booking.cancellation_reason = isAdmin(req.user)
+      ? "Cancelled by administrator"
+      : "Cancelled by customer";
+    booking.cancelled_at = new Date();
+    applyRefundSummary(booking, refundAmount);
+    await applyPaymentRefund(queryRunner.manager, booking, refundAmount);
+    await saveWithRepository(queryRunner.manager, repo, booking);
 
     for (const bs of booking.bookingSeats) {
       const state = await findSeatStateForUpdate(seatStateRepo, booking.show.id, bs.seat.id);
       if (state && state.status === "booked" && String(state.booking?.id) === String(booking.id)) {
         setStateAvailable(state);
-        await queryRunner.manager.save(state);
+        await saveWithRepository(queryRunner.manager, seatStateRepo, state);
       }
 
       bs.status = "cancelled";
-      await queryRunner.manager.save(bs);
+      await saveWithRepository(
+        queryRunner.manager,
+        getRepositoryOrNull(queryRunner.manager, "BookingSeat"),
+        bs,
+      );
     }
     await queryRunner.commitTransaction();
     transactionStarted = false;
-    return res.json({ message: "Cancelled" });
+    return res.json({
+      message: "Cancelled",
+      refundAmount,
+      paymentStatus: booking.payment_status,
+    });
   } catch (error) {
     if (transactionStarted) await rollbackQuietly(queryRunner, "Cancel booking");
     return next(normalizeBookingError(error));
@@ -374,6 +453,9 @@ exports.lockSeats = async (req, res, next) => {
       relations: { screen: true },
     });
     if (!show) throw new BookingRequestError(404, "Show not found");
+    if (show.status === "cancelled") {
+      throw new BookingRequestError(409, "Cannot lock seats for a cancelled show");
+    }
     if (new Date(show.start_time) <= new Date()) {
       throw new BookingRequestError(409, "Cannot lock seats for a show that has started");
     }
@@ -387,6 +469,9 @@ exports.lockSeats = async (req, res, next) => {
     }
     if (seats.some((seat) => String(seat.screen?.id) !== String(show.screen?.id))) {
       throw new BookingRequestError(400, "All seats must belong to the show's screen");
+    }
+    if (seats.some((seat) => seat.status === "disabled")) {
+      throw new BookingRequestError(409, "Disabled seats cannot be locked");
     }
 
     const lockToken = randomUUID();
@@ -415,7 +500,7 @@ exports.lockSeats = async (req, res, next) => {
       state.lock_token = lockToken;
       state.locked_until = lockedUntil;
       state.booking = null;
-      await queryRunner.manager.save(state);
+      await saveWithRepository(queryRunner.manager, stateRepo, state);
     }
 
     await queryRunner.commitTransaction();
@@ -469,7 +554,7 @@ exports.unlockSeats = async (req, res, next) => {
       }
 
       setStateAvailable(state);
-      await queryRunner.manager.save(state);
+      await saveWithRepository(queryRunner.manager, stateRepo, state);
     }
 
     await queryRunner.commitTransaction();

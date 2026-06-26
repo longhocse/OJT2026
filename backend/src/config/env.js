@@ -10,7 +10,7 @@ const envSchema = z
     DB_HOST: z.string().min(1),
     DB_PORT: z.coerce.number().int().min(1).max(65535).default(1433),
     DB_USERNAME: z.string().min(1),
-    DB_PASSWORD: z.string().min(12),
+    DB_PASSWORD: z.string().min(1),
     DB_DATABASE: z.string().min(1),
     DB_INSTANCE: z.string().min(1).optional(),
     DB_ENCRYPT: z
@@ -24,7 +24,18 @@ const envSchema = z
     JWT_SECRET: z.string().min(32),
     JWT_REFRESH_SECRET: z.string().min(32).optional(),
     JWT_EXPIRES_IN: z.string().default("1h"),
-    JWT_REFRESH_EXPIRES_IN: z.string().optional(),
+    JWT_REFRESH_EXPIRES_IN: z
+      .string()
+      .regex(/^\d+[smhd]$/)
+      .default("7d"),
+    PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
+    SHOW_CLEANING_BUFFER_MINUTES: z.coerce.number().int().min(0).max(180).default(15),
+    PAYMENT_PROVIDER_MODE: z.enum(["mock"]).default("mock"),
+    PAYMENT_WEBHOOK_SECRET: z.string().min(32),
+    TICKET_QR_SECRET: z.string().min(32),
+    PAYMENT_PENDING_TTL_MINUTES: z.coerce.number().int().min(1).max(120).default(15),
+    CASH_PAYMENT_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(60),
+    BOOKING_EXPIRY_INTERVAL_MS: z.coerce.number().int().min(1000).max(300000).default(30000),
     CORS_ORIGIN: z.string().default("http://localhost:3000"),
     CORS_ORIGINS: z.string().optional(),
   })

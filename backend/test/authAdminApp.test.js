@@ -101,6 +101,7 @@ test("graceful shutdown closes HTTP once and then database", async () => {
 });
 
 test("auth register, login and profile flow", { concurrency: false }, async (t) => {
+  const originalGetRepository = AppDataSource.getRepository;
   const repository = AppDataSource.getRepository("User");
   const originals = {
     findOne: repository.findOne,
@@ -108,6 +109,19 @@ test("auth register, login and profile flow", { concurrency: false }, async (t) 
     save: repository.save,
   };
   let storedUser = null;
+  const refreshTokens = [];
+  const refreshRepository = {
+    create: (data) => ({ id: `refresh-${refreshTokens.length + 1}`, ...data }),
+    save: async (token) => {
+      refreshTokens.push(token);
+      return token;
+    },
+  };
+  AppDataSource.getRepository = (name) => {
+    if (name === "User") return repository;
+    if (name === "RefreshToken") return refreshRepository;
+    return originalGetRepository.call(AppDataSource, name);
+  };
   repository.findOne = async ({ where }) => {
     if (where.email) return storedUser?.email === where.email ? storedUser : null;
     if (where.id) return storedUser?.id === where.id ? storedUser : null;
@@ -118,7 +132,10 @@ test("auth register, login and profile flow", { concurrency: false }, async (t) 
     storedUser = user;
     return user;
   };
-  t.after(() => Object.assign(repository, originals));
+  t.after(() => {
+    Object.assign(repository, originals);
+    AppDataSource.getRepository = originalGetRepository;
+  });
 
   const app = routeApp("/api/auth", authRoutes);
   const register = await request(app).post("/api/auth/register").send({
@@ -146,6 +163,7 @@ test("auth register, login and profile flow", { concurrency: false }, async (t) 
   });
   assert.equal(login.status, 200);
   assert.ok(login.body.token);
+  assert.match(login.headers["set-cookie"][0], /^movietap_refresh=/);
 
   const profile = await request(app)
     .get("/api/auth/me")
@@ -165,6 +183,7 @@ test("admin can create, update and delete movies", { concurrency: false }, async
       return entity;
     },
     findOneBy: async ({ id }) => (id === MOVIE_ID ? movie : null),
+    findOne: async ({ where }) => (where.id === MOVIE_ID ? movie : null),
     merge: (entity, data) => Object.assign(entity, data),
     delete: async (id) => ({ affected: id === MOVIE_ID ? 1 : 0 }),
   };
@@ -187,6 +206,10 @@ test("admin can create, update and delete movies", { concurrency: false }, async
     process.env.JWT_SECRET,
     { expiresIn: "5m" },
   );
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
 
   const denied = await request(app)
     .post("/api/movies")
@@ -197,9 +220,37 @@ test("admin can create, update and delete movies", { concurrency: false }, async
   const created = await request(app)
     .post("/api/movies")
     .set("Authorization", `Bearer ${adminToken}`)
-    .send({ title: "Movie", duration: 120, unexpected: "stripped" });
+    .send({
+      title: "Movie",
+      duration: 120,
+      description: "",
+      poster_url: "",
+      release_date: "",
+      unexpected: "stripped",
+    });
   assert.equal(created.status, 201);
   assert.equal("unexpected" in created.body, false);
+  assert.equal(created.body.description, null);
+  assert.equal(created.body.poster_url, null);
+  assert.equal(created.body.release_date, null);
+
+  globalThis.fetch = async () => ({
+    headers: { get: () => "text/html; charset=utf-8" },
+    text: async () =>
+      '<html><head><meta property="og:image" content="/images/poster.webp"></head></html>',
+  });
+  const createdFromPagePoster = await request(app)
+    .post("/api/movies")
+    .set("Authorization", `Bearer ${adminToken}`)
+    .send({
+      title: "Movie With Page Poster",
+      duration: 120,
+      poster_url: "https://example.com/movie-page",
+      trailer_url: "https://www.youtube.com/watch?v=0wTIniZRYXU",
+    });
+  assert.equal(createdFromPagePoster.status, 201);
+  assert.equal(createdFromPagePoster.body.poster_url, "https://example.com/images/poster.webp");
+  assert.equal(createdFromPagePoster.body.trailer_url, "https://www.youtube.com/embed/0wTIniZRYXU");
 
   const updated = await request(app)
     .put(`/api/movies/${MOVIE_ID}`)

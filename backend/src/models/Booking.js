@@ -10,8 +10,15 @@ module.exports = new EntitySchema({
       generated: "uuid",
     },
     total_price: { type: "decimal", precision: 10, scale: 2 },
-    status: { type: "nvarchar", length: 20, default: "pending" },
+    status: { type: "nvarchar", length: 20, default: "pending_payment" },
     payment_method: { type: "nvarchar", length: 50, nullable: true },
+    payment_status: { type: "nvarchar", length: 30, default: "pending" },
+    refunded_amount: { type: "decimal", precision: 10, scale: 2, default: 0 },
+    cancellation_reason: { type: "nvarchar", length: 500, nullable: true },
+    cancelled_at: { type: "datetime2", nullable: true },
+    expires_at: { type: "datetime2", nullable: true },
+    ticket_code: { type: "nvarchar", length: 40, nullable: true, unique: true },
+    checked_in_at: { type: "datetime2", nullable: true },
     created_at: { type: "datetime", createDate: true },
   },
   relations: {
@@ -30,6 +37,11 @@ module.exports = new EntitySchema({
     bookingSeats: {
       target: "BookingSeat",
       type: "one-to-many",
+      inverseSide: "booking",
+    },
+    payment: {
+      target: "Payment",
+      type: "one-to-one",
       inverseSide: "booking",
     },
   },

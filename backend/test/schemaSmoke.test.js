@@ -17,6 +17,10 @@ const expectedEntities = [
   "BookingSeat",
   "Review",
   "ShowSeatState",
+  "Payment",
+  "RefreshToken",
+  "PasswordResetToken",
+  "AuditLog",
 ];
 
 test("all EntitySchemas and important SQL Server queries build", async (t) => {
@@ -25,7 +29,10 @@ test("all EntitySchemas and important SQL Server queries build", async (t) => {
   await t.test("synchronize remains disabled and every repository builds SQL", () => {
     assert.equal(AppDataSource.options.synchronize, false);
     assert.deepEqual(
-      AppDataSource.entityMetadatas.map((metadata) => metadata.name).sort(),
+      AppDataSource.entityMetadatas
+        .filter((metadata) => metadata.name !== "movie_genres")
+        .map((metadata) => metadata.name)
+        .sort(),
       [...expectedEntities].sort(),
     );
 
@@ -54,6 +61,46 @@ test("all EntitySchemas and important SQL Server queries build", async (t) => {
     assert.ok(metadata.checks.some((check) => check.name === "CK_reviews_rating"));
     assert.equal(metadata.findRelationWithPropertyPath("user").isNullable, false);
     assert.equal(metadata.findRelationWithPropertyPath("movie").isNullable, false);
+  });
+
+  await t.test("Payment exposes the required lifecycle columns and one booking relation", () => {
+    const metadata = AppDataSource.getMetadata("Payment");
+    const columns = metadata.columns.map((column) => column.databaseName);
+    for (const column of [
+      "id",
+      "booking_id",
+      "provider",
+      "provider_transaction_id",
+      "amount",
+      "status",
+      "idempotency_key",
+      "paid_at",
+      "failed_at",
+      "refunded_amount",
+      "created_at",
+      "updated_at",
+    ]) {
+      assert.ok(columns.includes(column), `missing payments.${column}`);
+    }
+    assert.equal(metadata.findRelationWithPropertyPath("booking").isOneToOne, true);
+  });
+
+  await t.test("AuditLog captures admin operations without sensitive payload columns", () => {
+    const metadata = AppDataSource.getMetadata("AuditLog");
+    const columns = metadata.columns.map((column) => column.databaseName);
+    for (const column of [
+      "id",
+      "actor_user_id",
+      "action",
+      "resource_type",
+      "resource_id",
+      "metadata_json",
+      "created_at",
+    ]) {
+      assert.ok(columns.includes(column), `missing audit_logs.${column}`);
+    }
+    assert.equal(metadata.findRelationWithPropertyPath("actor").isNullable, true);
+    assert.ok(!columns.includes("password_hash"));
   });
 
   await t.test("relation-based filters generate SQL without virtual relation-id columns", () => {

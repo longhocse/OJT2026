@@ -1,4 +1,5 @@
-const SENSITIVE_KEY = /authorization|cookie|password|secret|token|api[-_]?key|credential/i;
+const SENSITIVE_KEY =
+  /authorization|cookie|password|secret|token|api[-_]?key|credential|card[-_]?number|cvv|cvc|cardholder|\bpan\b/i;
 
 const redact = (value, seen = new WeakSet()) => {
   if (value === null || value === undefined) return value;

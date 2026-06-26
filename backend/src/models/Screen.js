@@ -12,6 +12,7 @@ module.exports = new EntitySchema({
     name: { type: "nvarchar", length: 50 },
     total_seats: { type: "int" },
     layout_json: { type: "nvarchar", length: "MAX", nullable: true },
+    is_active: { type: "bit", default: true },
   },
   relations: {
     theater: {
@@ -30,6 +31,7 @@ module.exports = new EntitySchema({
       target: "Seat",
       type: "one-to-many",
       inverseSide: "screen",
+      cascade: ["insert", "update"],
     },
   },
 });

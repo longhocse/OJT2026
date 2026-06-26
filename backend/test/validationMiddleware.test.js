@@ -98,7 +98,7 @@ test("API validation returns one consistent error contract", { concurrency: fals
   const validBody = await validResponse.json();
   assert.equal(validResponse.status, 200);
   assert.equal(validBody.body.title, "Valid movie");
-  assert.equal(validBody.body.rating, 5);
+  assert.equal("rating" in validBody.body, false);
   assert.equal("unexpectedAdminField" in validBody.body, false);
 
   const validRegister = await fetch(`${server.baseUrl}/validation/register`, {

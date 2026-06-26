@@ -9,22 +9,27 @@ exports.getUserRecommendations = async (req, res) => {
     .innerJoin("booking.user", "user")
     .innerJoin("booking.show", "show")
     .innerJoin("show.movie", "movie")
+    .innerJoin("movie.genres", "genre")
     .where("user.id = :userId", { userId })
-    .andWhere("booking.status = :bookingStatus", { bookingStatus: "confirmed" })
-    .andWhere("movie.genre IS NOT NULL")
-    .select("movie.genre", "genre")
+    .andWhere("booking.status IN (:...bookingStatuses)", {
+      bookingStatuses: ["confirmed", "used"],
+    })
+    .select("genre.id", "genreId")
+    .addSelect("genre.name", "genreName")
     .addSelect("COUNT(*)", "count")
-    .groupBy("movie.genre")
+    .groupBy("genre.id")
+    .addGroupBy("genre.name")
     .orderBy("COUNT(*)", "DESC")
     .limit(3)
     .getRawMany();
   if (userGenres.length === 0) return res.json(await exports.getTrendingMoviesData());
 
-  const genres = userGenres.map((item) => item.genre);
+  const genreIds = userGenres.map((item) => item.genreId);
   const recs = await AppDataSource.getRepository("Movie")
     .createQueryBuilder("movie")
+    .leftJoinAndSelect("movie.genres", "genre")
     .where("movie.status = :status", { status: "now_showing" })
-    .andWhere("movie.genre IN (:...genres)", { genres })
+    .andWhere("genre.id IN (:...genreIds)", { genreIds })
     .orderBy("movie.rating", "DESC")
     .limit(6)
     .getMany();
@@ -41,7 +46,9 @@ exports.getTrendingMoviesData = async () => {
     .innerJoin("booking.show", "show")
     .innerJoin("show.movie", "movie")
     .where("booking.created_at >= DATEADD(day, -7, GETDATE())")
-    .andWhere("booking.status = :bookingStatus", { bookingStatus: "confirmed" })
+    .andWhere("booking.status IN (:...bookingStatuses)", {
+      bookingStatuses: ["confirmed", "used"],
+    })
     .select("movie.id", "movieId")
     .addSelect("COUNT(booking.id)", "bookingCount")
     .groupBy("movie.id")

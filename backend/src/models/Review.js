@@ -24,6 +24,7 @@ module.exports = new EntitySchema({
     rating: { type: "float" },
     comment: { type: "text", nullable: true },
     created_at: { type: "datetime", createDate: true },
+    updated_at: { type: "datetime2", updateDate: true },
   },
   relations: {
     user: {

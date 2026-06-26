@@ -10,3 +10,5 @@ process.env.JWT_REFRESH_SECRET = "different-test-refresh-secret-32-characters";
 process.env.JWT_EXPIRES_IN = "5m";
 process.env.JWT_REFRESH_EXPIRES_IN = "1h";
 process.env.CORS_ORIGIN = "http://localhost:3000";
+process.env.PAYMENT_WEBHOOK_SECRET = "test-payment-webhook-secret-32-characters";
+process.env.TICKET_QR_SECRET = "test-ticket-qr-secret-at-least-32-chars";

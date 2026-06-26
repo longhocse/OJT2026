@@ -8,6 +8,9 @@ const {
   deleteMovie,
   getReviews,
   addReview,
+  updateReview,
+  deleteOwnReview,
+  moderateReview,
 } = require("../controllers/movieController");
 const { authMiddleware, adminMiddleware } = require("../middleware/authMiddleware");
 const validation = require("../middleware/apiValidation");
@@ -28,5 +31,25 @@ router.put(
 router.delete("/:id", authMiddleware, adminMiddleware, validation.idParam(), deleteMovie);
 router.get("/:movieId/reviews", validation.idParam("movieId"), getReviews);
 router.post("/:movieId/reviews", authMiddleware, validation.reviewCreate, addReview);
+router.put(
+  "/:movieId/reviews/:reviewId",
+  authMiddleware,
+  validation.reviewParams,
+  validation.reviewUpdate,
+  updateReview,
+);
+router.delete(
+  "/:movieId/reviews/:reviewId",
+  authMiddleware,
+  validation.reviewParams,
+  deleteOwnReview,
+);
+router.delete(
+  "/:movieId/reviews/:reviewId/moderate",
+  authMiddleware,
+  adminMiddleware,
+  validation.reviewParams,
+  moderateReview,
+);
 
 module.exports = router;

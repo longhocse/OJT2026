@@ -21,11 +21,13 @@ const chain = (terminalName, terminalValue, capture = {}) => {
   const builder = {};
   for (const method of [
     "innerJoin",
+    "leftJoinAndSelect",
     "where",
     "andWhere",
     "select",
     "addSelect",
     "groupBy",
+    "addGroupBy",
     "orderBy",
     "limit",
   ]) {
@@ -64,12 +66,13 @@ test("personal recommendations use the authenticated user", { concurrency: false
   AppDataSource.getRepository = (name) => {
     if (name === "Booking") {
       return {
-        createQueryBuilder: () => chain("getRawMany", [{ genre: "Drama" }], capture),
+        createQueryBuilder: () =>
+          chain("getRawMany", [{ genreId: "genre-1", genreName: "Drama" }], capture),
       };
     }
     if (name === "Movie") {
       return {
-        createQueryBuilder: () => chain("getMany", [{ id: MOVIE_ID, genre: "Drama" }]),
+        createQueryBuilder: () => chain("getMany", [{ id: MOVIE_ID, genres: [] }]),
       };
     }
     throw new Error(`Unexpected repository: ${name}`);
@@ -92,11 +95,8 @@ test("personal recommendations use the authenticated user", { concurrency: false
   assert.equal(response.status, 200);
   const userCondition = capture.conditions.find(([sql]) => sql === "user.id = :userId");
   assert.equal(userCondition[1].userId, USER_ID);
-  const statusCondition = capture.conditions.find(
-    ([sql]) => sql === "booking.status = :bookingStatus",
-  );
-  assert.equal(statusCondition[1].bookingStatus, "confirmed");
-  assert.ok(capture.conditions.some(([sql]) => sql === "movie.genre IS NOT NULL"));
+  const statusCondition = capture.conditions.find(([sql]) => sql.includes("booking.status IN"));
+  assert.deepEqual(statusCondition[1].bookingStatuses, ["confirmed", "used"]);
 });
 
 test("reviews require a confirmed booking and upsert safely", { concurrency: false }, async (t) => {
@@ -109,26 +109,29 @@ test("reviews require a confirmed booking and upsert safely", { concurrency: fal
   const bookingCapture = {};
   const transactions = [];
   AppDataSource.createQueryRunner = () => {
-    const state = { committed: false, rolledBack: false, released: false };
+    const state = { committed: false, rolledBack: false, released: false, active: false };
     transactions.push(state);
     const movie = { id: MOVIE_ID, title: "Movie", rating: 0 };
     return {
       connect: async () => {},
       startTransaction: async (isolation) => {
         state.isolation = isolation;
+        state.active = true;
       },
       commitTransaction: async () => {
         state.committed = true;
+        state.active = false;
       },
       rollbackTransaction: async () => {
         state.rolledBack = true;
+        state.active = false;
       },
       release: async () => {
         state.released = true;
       },
       manager: {
         getRepository: (name) => {
-          if (name === "Movie") return { findOne: async () => movie };
+          if (name === "Movie") return { findOne: async () => movie, save: async () => movie };
           if (name === "Booking") {
             return {
               createQueryBuilder: () =>
@@ -138,7 +141,11 @@ test("reviews require a confirmed booking and upsert safely", { concurrency: fal
           if (name === "Review") {
             return {
               findOne: async () => existingReview,
-              create: (data) => ({ id: "review-1", ...data }),
+              create: (data) => ({ id: "44444444-4444-4444-8444-444444444444", ...data }),
+              save: async (entity) => {
+                existingReview = entity;
+                return entity;
+              },
               createQueryBuilder: () => chain("getRawOne", { avg: "5" }),
             };
           }
@@ -148,6 +155,9 @@ test("reviews require a confirmed booking and upsert safely", { concurrency: fal
           if (Object.hasOwn(entity, "comment")) existingReview = entity;
           return entity;
         },
+      },
+      get isTransactionActive() {
+        return state.active;
       },
     };
   };
@@ -174,10 +184,11 @@ test("reviews require a confirmed booking and upsert safely", { concurrency: fal
   assert.equal(forbidden.status, 403);
   assert.equal(transactions.at(-1).rolledBack, true);
   assert.equal(transactions.at(-1).released, true);
-  const confirmedCondition = bookingCapture.conditions.find(
-    ([sql]) => sql === "booking.status = :status",
+  const confirmedCondition = bookingCapture.conditions.find(([sql]) =>
+    sql.includes("booking.status IN"),
   );
-  assert.equal(confirmedCondition[1].status, "confirmed");
+  assert.deepEqual(confirmedCondition[1].statuses, ["confirmed", "used"]);
+  assert.ok(bookingCapture.conditions.some(([sql]) => sql === "show.end_time <= :now"));
 
   const runnerCountBeforeInvalidRating = transactions.length;
   const invalidRating = await requestReview(6, "Invalid");
@@ -190,7 +201,20 @@ test("reviews require a confirmed booking and upsert safely", { concurrency: fal
   assert.equal(transactions.at(-1).committed, true);
   assert.equal(transactions.at(-1).isolation, "SERIALIZABLE");
 
-  const updated = await requestReview(4, "Updated");
+  const duplicate = await requestReview(4, "Updated");
+  assert.equal(duplicate.status, 409);
+
+  const updated = await fetch(
+    `${server.baseUrl}/api/movies/${MOVIE_ID}/reviews/44444444-4444-4444-8444-444444444444`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${tokenFor(USER_ID)}`,
+      },
+      body: JSON.stringify({ rating: 4, comment: "Updated" }),
+    },
+  );
   assert.equal(updated.status, 200);
   const updatedBody = await updated.json();
   assert.equal(updatedBody.rating, 4);

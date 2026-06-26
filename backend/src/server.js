@@ -2,8 +2,14 @@ const { env } = require("./config/env");
 const { AppDataSource } = require("./config/database");
 const { createApp } = require("./app");
 const logger = require("./utils/logger");
+const { startBookingExpiryWorker } = require("./services/bookingExpiryWorker");
 
-const createGracefulShutdown = ({ server, dataSource = AppDataSource, timeoutMs = 10000 }) => {
+const createGracefulShutdown = ({
+  server,
+  dataSource = AppDataSource,
+  timeoutMs = 10000,
+  stopWorker = () => {},
+}) => {
   let shutdownPromise;
 
   return (signal = "manual") => {
@@ -11,6 +17,7 @@ const createGracefulShutdown = ({ server, dataSource = AppDataSource, timeoutMs 
 
     shutdownPromise = (async () => {
       logger.info("shutdown_started", { signal });
+      stopWorker();
       await new Promise((resolve) => {
         const timeout = setTimeout(() => {
           logger.error("http_shutdown_timeout", { timeoutMs });
@@ -45,7 +52,7 @@ const startServer = async () => {
   const server = app.listen(env.PORT, () => {
     logger.info("server_started", { port: env.PORT, corsOrigins: env.CORS_ALLOWED_ORIGINS });
   });
-  const shutdown = createGracefulShutdown({ server });
+  const shutdown = createGracefulShutdown({ server, stopWorker: startBookingExpiryWorker() });
   server.shutdown = shutdown;
 
   for (const signal of ["SIGTERM", "SIGINT"]) {

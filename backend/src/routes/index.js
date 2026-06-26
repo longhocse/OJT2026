@@ -10,6 +10,7 @@ const cinemaRoutes = require("./cinemaRoutes");
 const roomRoutes = require("./roomRoutes");
 const adminRoutes = require("./adminRoutes");
 const userRoutes = require("./userRoutes");
+const paymentRoutes = require("./paymentRoutes");
 const router = express.Router();
 
 router.use("/auth", authRoutes);
@@ -22,4 +23,5 @@ router.use("/cinemas", cinemaRoutes);
 router.use("/rooms", roomRoutes);
 router.use("/admin", adminRoutes);
 router.use("/users", userRoutes);
+router.use("/payments", paymentRoutes);
 module.exports = router;

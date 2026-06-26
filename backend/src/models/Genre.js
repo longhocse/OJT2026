@@ -25,4 +25,11 @@ module.exports = new EntitySchema({
       createDate: true,
     },
   },
+  relations: {
+    movies: {
+      target: "Movie",
+      type: "many-to-many",
+      inverseSide: "genres",
+    },
+  },
 });

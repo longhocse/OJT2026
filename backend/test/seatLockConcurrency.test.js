@@ -118,6 +118,12 @@ test("two users cannot lock or book the same show seat", { concurrency: false },
             return { create: (data) => ({ id: "booking-1", ...data }) };
           }
           if (name === "BookingSeat") return { create: (data) => data };
+          if (name === "Payment") {
+            return {
+              create: (data) => ({ id: "payment-1", ...data }),
+              save: async (entity) => entity,
+            };
+          }
           throw new Error(`Unexpected repository: ${name}`);
         },
         save: async (entity) => {
