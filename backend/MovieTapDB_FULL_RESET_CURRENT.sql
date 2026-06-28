@@ -25,11 +25,11 @@ DECLARE @ExistingAppTables INT = (
       AND name IN (
           N'users', N'movies', N'genres', N'theaters', N'screens', N'shows',
           N'seats', N'bookings', N'booking_seats', N'reviews', N'show_seat_states', N'payments',
-          N'refresh_tokens', N'password_reset_tokens', N'movie_genres', N'audit_logs'
+          N'refresh_tokens', N'password_reset_tokens', N'email_verification_tokens', N'movie_genres', N'audit_logs'
       )
 );
 
-IF @ExistingAppTables = 16
+IF @ExistingAppTables = 17
 BEGIN
     PRINT 'MovieTap schema already exists; bootstrap skipped.';
     RETURN;
@@ -53,6 +53,7 @@ BEGIN TRY
             CONSTRAINT DF_users_role DEFAULT N'customer',
         is_active BIT NOT NULL
             CONSTRAINT DF_users_is_active DEFAULT 1,
+        email_verified_at DATETIME2 NULL,
         created_at DATETIME NOT NULL
             CONSTRAINT DF_users_created_at DEFAULT GETDATE(),
         CONSTRAINT UQ_users_email UNIQUE (email)
@@ -82,6 +83,17 @@ BEGIN TRY
         CONSTRAINT FK_password_reset_tokens_user FOREIGN KEY (user_id) REFERENCES dbo.users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE dbo.email_verification_tokens (
+        id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_email_verification_tokens PRIMARY KEY
+            CONSTRAINT DF_email_verification_tokens_id DEFAULT NEWID(),
+        user_id UNIQUEIDENTIFIER NOT NULL,
+        token_hash CHAR(64) NOT NULL CONSTRAINT UQ_email_verification_tokens_hash UNIQUE,
+        expires_at DATETIME2 NOT NULL,
+        used_at DATETIME2 NULL,
+        created_at DATETIME2 NOT NULL CONSTRAINT DF_email_verification_tokens_created_at DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_email_verification_tokens_user FOREIGN KEY (user_id) REFERENCES dbo.users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE dbo.audit_logs (
         id UNIQUEIDENTIFIER NOT NULL
             CONSTRAINT PK_audit_logs PRIMARY KEY
@@ -102,7 +114,7 @@ BEGIN TRY
             CONSTRAINT PK_movies PRIMARY KEY
             CONSTRAINT DF_movies_id DEFAULT NEWID(),
         title NVARCHAR(200) NOT NULL,
-        description TEXT NULL,
+        description NVARCHAR(MAX) NULL,
         rating FLOAT NOT NULL
             CONSTRAINT DF_movies_rating DEFAULT 0,
         duration INT NOT NULL,
@@ -283,7 +295,7 @@ BEGIN TRY
         user_id UNIQUEIDENTIFIER NOT NULL,
         movie_id UNIQUEIDENTIFIER NOT NULL,
         rating FLOAT NOT NULL,
-        comment TEXT NULL,
+        comment NVARCHAR(MAX) NULL,
         created_at DATETIME NOT NULL
             CONSTRAINT DF_reviews_created_at DEFAULT GETDATE(),
         updated_at DATETIME2 NOT NULL
@@ -414,10 +426,10 @@ BEGIN TRY
     DECLARE @ShowId UNIQUEIDENTIFIER = '60000000-0000-4000-8000-000000000001';
     DECLARE @PasswordHash NVARCHAR(255) = N'$2b$12$w2fMm9O6W26kT6qagQwXwe6rF0ApjOzGUAI.8h9wMgYW1YkliwhGq';
 
-    INSERT INTO dbo.users (id, email, password_hash, name, role, is_active)
+    INSERT INTO dbo.users (id, email, password_hash, name, role, is_active, email_verified_at)
     VALUES
-        (@AdminId, N'admin@movietap.local', @PasswordHash, N'Demo Admin', N'admin', 1),
-        (@CustomerId, N'customer@movietap.local', @PasswordHash, N'Demo Customer', N'customer', 1);
+        (@AdminId, N'admin@movietap.local', @PasswordHash, N'Demo Admin', N'admin', 1, SYSUTCDATETIME()),
+        (@CustomerId, N'customer@movietap.local', @PasswordHash, N'Demo Customer', N'customer', 1, SYSUTCDATETIME());
 
     INSERT INTO dbo.genres (id, name, description)
     VALUES (@GenreId, N'Action', N'Development seed genre');

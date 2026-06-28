@@ -9,15 +9,23 @@ const response = {
   user: { id: "user-1", email: "u@example.com", name: "User", role: "customer" },
 };
 
-test("login and register normalize auth responses without logging credentials", async () => {
-  api.post.mockResolvedValue({ data: response });
+test("login and verifyEmail normalize auth responses; register returns verification status", async () => {
+  api.post
+    .mockResolvedValueOnce({ data: response })
+    .mockResolvedValueOnce({ data: { message: "Check email", emailSent: true } })
+    .mockResolvedValueOnce({ data: response });
   await expect(
     authService.login({ email: "u@example.com", password: "Password1" }),
   ).resolves.toMatchObject({ token: "token", user: { id: "user-1" } });
   await expect(
     authService.register({ email: "u@example.com", password: "Password1", name: "User" }),
-  ).resolves.toMatchObject({ token: "token" });
-  expect(api.post.mock.calls.map(([url]) => url)).toEqual(["/auth/login", "/auth/register"]);
+  ).resolves.toMatchObject({ message: "Check email", emailSent: true });
+  await expect(authService.verifyEmail("verify-token")).resolves.toMatchObject({ token: "token" });
+  expect(api.post.mock.calls.map(([url]) => url)).toEqual([
+    "/auth/login",
+    "/auth/register",
+    "/auth/verify-email",
+  ]);
 });
 
 test("getMe rebuilds the public user from the backend", async () => {
@@ -32,7 +40,8 @@ test("covers refresh, logout, profile and password recovery endpoints", async ()
     .mockResolvedValueOnce({ data: { message: "Logged out" } })
     .mockResolvedValueOnce({ data: { message: "Password changed" } })
     .mockResolvedValueOnce({ data: { message: "Reset requested" } })
-    .mockResolvedValueOnce({ data: { message: "Password reset successful" } });
+    .mockResolvedValueOnce({ data: { message: "Password reset successful" } })
+    .mockResolvedValueOnce({ data: { message: "Verification sent", emailSent: true } });
   api.put.mockResolvedValue({ data: { ...response.user, name: "Updated" } });
 
   await expect(authService.refresh()).resolves.toMatchObject({ token: "token" });
@@ -49,5 +58,9 @@ test("covers refresh, logout, profile and password recovery endpoints", async ()
   await expect(
     authService.resetPassword({ token: "reset", newPassword: "New12345" }),
   ).resolves.toEqual({ message: "Password reset successful" });
+  await expect(authService.resendVerification("u@example.com")).resolves.toEqual({
+    message: "Verification sent",
+    emailSent: true,
+  });
   expect(api.put).toHaveBeenCalledWith("/auth/profile", { name: "Updated" });
 });

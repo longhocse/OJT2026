@@ -21,6 +21,7 @@ const publicUser = (user) => ({
   phone: user.phone ?? null,
   role: user.role,
   is_active: user.is_active !== false,
+  email_verified_at: user.email_verified_at ?? null,
   created_at: user.created_at,
 });
 
@@ -111,6 +112,11 @@ const rotateRefreshToken = async (rawToken) => {
       current.revoked_at = new Date();
       await repository.save(current);
       throw new AppError(403, "ACCOUNT_LOCKED", "Account is locked");
+    }
+    if (!current.user.email_verified_at) {
+      current.revoked_at = new Date();
+      await repository.save(current);
+      throw new AppError(403, "EMAIL_NOT_VERIFIED", "Email verification is required");
     }
 
     const next = await issueRefreshToken(repository, current.user, current.family_id);

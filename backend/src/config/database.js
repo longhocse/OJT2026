@@ -16,6 +16,7 @@ const ShowSeatState = require("../models/ShowSeatState");
 const Payment = require("../models/Payment");
 const RefreshToken = require("../models/RefreshToken");
 const PasswordResetToken = require("../models/PasswordResetToken");
+const EmailVerificationToken = require("../models/EmailVerificationToken");
 const AuditLog = require("../models/AuditLog");
 
 const AppDataSource = new DataSource({
@@ -50,6 +51,7 @@ const AppDataSource = new DataSource({
     Payment,
     RefreshToken,
     PasswordResetToken,
+    EmailVerificationToken,
     AuditLog,
   ],
 

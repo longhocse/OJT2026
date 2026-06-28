@@ -11,9 +11,42 @@ exports.getCinemas = async (req, res) => {
   res.json(cinemas);
 };
 
+exports.getAdminCinemas = async (req, res) => {
+  const { page = 1, limit = 12, search, status } = req.query;
+  const qb = AppDataSource.getRepository("Theater")
+    .createQueryBuilder("cinema")
+    .leftJoinAndSelect("cinema.screens", "screens");
+
+  if (status === "active") qb.where("cinema.is_active = :active", { active: true });
+  if (status === "inactive") qb.where("cinema.is_active = :active", { active: false });
+  if (search) {
+    const condition =
+      "(cinema.name LIKE :search OR cinema.address LIKE :search OR cinema.city LIKE :search OR cinema.phone LIKE :search)";
+    if (qb.expressionMap.wheres.length > 0) qb.andWhere(condition, { search: `%${search}%` });
+    else qb.where(condition, { search: `%${search}%` });
+  }
+
+  const [data, total] = await qb
+    .orderBy("cinema.is_active", "DESC")
+    .addOrderBy("cinema.name", "ASC")
+    .skip((Number(page) - 1) * Number(limit))
+    .take(Number(limit))
+    .getManyAndCount();
+
+  res.json({
+    data,
+    pagination: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      pages: Math.max(1, Math.ceil(total / Number(limit))),
+    },
+  });
+};
+
 exports.getCinemaById = async (req, res) => {
   const cinema = await AppDataSource.getRepository("Theater").findOne({
-    where: { id: req.params.id, is_active: true },
+    where: { id: req.params.id },
     relations: { screens: true },
   });
   if (!cinema) throw new AppError(404, "CINEMA_NOT_FOUND", "Cinema not found");
@@ -84,4 +117,40 @@ exports.deleteCinema = async (req, res) => {
     resourceId: cinema.id,
   });
   return res.json({ message: "Deleted" });
+};
+
+exports.deactivateCinema = async (req, res) => {
+  const repo = AppDataSource.getRepository("Theater");
+  const cinema = await repo.findOne({
+    where: { id: req.params.id },
+    relations: { screens: true },
+  });
+  if (!cinema) throw new AppError(404, "CINEMA_NOT_FOUND", "Cinema not found");
+  cinema.is_active = false;
+  await repo.save(cinema);
+  await recordAuditLog(req, {
+    action: "cinema.deactivate",
+    resourceType: "Theater",
+    resourceId: cinema.id,
+    metadata: { reason: "manual_admin_action" },
+  });
+  res.json(cinema);
+};
+
+exports.restoreCinema = async (req, res) => {
+  const repo = AppDataSource.getRepository("Theater");
+  const cinema = await repo.findOne({
+    where: { id: req.params.id },
+    relations: { screens: true },
+  });
+  if (!cinema) throw new AppError(404, "CINEMA_NOT_FOUND", "Cinema not found");
+  cinema.is_active = true;
+  await repo.save(cinema);
+  await recordAuditLog(req, {
+    action: "cinema.restore",
+    resourceType: "Theater",
+    resourceId: cinema.id,
+    metadata: { name: cinema.name },
+  });
+  res.json(cinema);
 };

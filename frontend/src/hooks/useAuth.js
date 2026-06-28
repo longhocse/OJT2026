@@ -26,9 +26,13 @@ const useAuth = () => {
     [dispatch],
   );
 
-  const register = useCallback(
-    async (userData) => {
-      const response = assertAuthResponse(await authService.register(userData));
+  const register = useCallback(async (userData) => {
+    return authService.register(userData);
+  }, []);
+
+  const verifyEmail = useCallback(
+    async (token) => {
+      const response = assertAuthResponse(await authService.verifyEmail(token));
       dispatch(setCredentials(response));
       return response;
     },
@@ -52,6 +56,7 @@ const useAuth = () => {
     ...auth,
     login,
     register,
+    verifyEmail,
     logout: logoutUser,
   };
 };

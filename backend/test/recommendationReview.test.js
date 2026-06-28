@@ -99,7 +99,7 @@ test("personal recommendations use the authenticated user", { concurrency: false
   assert.deepEqual(statusCondition[1].bookingStatuses, ["confirmed", "used"]);
 });
 
-test("reviews require a confirmed booking and upsert safely", { concurrency: false }, async (t) => {
+test("reviews require a used ticket and upsert safely", { concurrency: false }, async (t) => {
   const originalSecret = process.env.JWT_SECRET;
   const originalCreateQueryRunner = AppDataSource.createQueryRunner;
   process.env.JWT_SECRET = JWT_SECRET;
@@ -184,11 +184,11 @@ test("reviews require a confirmed booking and upsert safely", { concurrency: fal
   assert.equal(forbidden.status, 403);
   assert.equal(transactions.at(-1).rolledBack, true);
   assert.equal(transactions.at(-1).released, true);
-  const confirmedCondition = bookingCapture.conditions.find(([sql]) =>
-    sql.includes("booking.status IN"),
+  const usedCondition = bookingCapture.conditions.find(
+    ([sql]) => sql === "booking.status = :status",
   );
-  assert.deepEqual(confirmedCondition[1].statuses, ["confirmed", "used"]);
-  assert.ok(bookingCapture.conditions.some(([sql]) => sql === "show.end_time <= :now"));
+  assert.equal(usedCondition[1].status, "used");
+  assert.ok(!bookingCapture.conditions.some(([sql]) => sql === "show.end_time <= :now"));
 
   const runnerCountBeforeInvalidRating = transactions.length;
   const invalidRating = await requestReview(6, "Invalid");

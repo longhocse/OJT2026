@@ -1,14 +1,14 @@
 import { getReviewSubmissionState } from "./reviewContract";
 
-test("maps REVIEW_NOT_ALLOWED to a confirmed-booking message", () => {
+test("maps REVIEW_NOT_ALLOWED to a used-ticket message", () => {
   const state = getReviewSubmissionState({
     response: {
       status: 403,
-      data: { code: "REVIEW_NOT_ALLOWED", message: "A confirmed booking is required", errors: [] },
+      data: { code: "REVIEW_NOT_ALLOWED", message: "A used ticket is required", errors: [] },
     },
   });
   expect(state.kind).toBe("not-eligible");
-  expect(state.message).toMatch(/booking đã xác nhận/i);
+  expect(state.message).toMatch(/vé đã check-in/i);
 });
 
 test.each([

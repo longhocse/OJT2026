@@ -9,7 +9,9 @@ import MovieDetailPage from "./MovieDetailPage";
 jest.mock("../services/movieService", () => ({
   movieService: { getMovieById: jest.fn(), getReviews: jest.fn(), addReview: jest.fn() },
 }));
-jest.mock("../services/bookingService", () => ({ bookingService: { getShows: jest.fn() } }));
+jest.mock("../services/bookingService", () => ({
+  bookingService: { getShows: jest.fn(), getMyBookings: jest.fn() },
+}));
 
 const MOVIE_ID = "22222222-2222-4222-8222-222222222222";
 const movie = {
@@ -34,6 +36,9 @@ test("authenticated user submits a 1-5 review and refreshes review data", async 
     review: { id: "review-1", rating: 4, comment: "Good" },
   });
   bookingService.getShows.mockResolvedValue([]);
+  bookingService.getMyBookings.mockResolvedValue([
+    { id: "booking-1", status: "used", show: { movie: { id: MOVIE_ID } } },
+  ]);
   renderWithProviders(
     <Routes>
       <Route path="/movie/:id" element={<MovieDetailPage />} />
@@ -52,6 +57,7 @@ test("authenticated user submits a 1-5 review and refreshes review data", async 
   );
 
   expect(await screen.findByText("Review Movie")).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole("button", { name: /đánh giá/i })).toBeEnabled());
   userEvent.click(screen.getByRole("button", { name: "4 sao" }));
   userEvent.type(screen.getByRole("textbox"), "Good");
   userEvent.click(screen.getByRole("button", { name: /đánh giá/i }));

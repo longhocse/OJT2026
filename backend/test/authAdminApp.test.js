@@ -102,6 +102,7 @@ test("graceful shutdown closes HTTP once and then database", async () => {
 
 test("auth register, login and profile flow", { concurrency: false }, async (t) => {
   const originalGetRepository = AppDataSource.getRepository;
+  const originalCreateQueryRunner = AppDataSource.createQueryRunner;
   const repository = AppDataSource.getRepository("User");
   const originals = {
     findOne: repository.findOne,
@@ -110,6 +111,7 @@ test("auth register, login and profile flow", { concurrency: false }, async (t) 
   };
   let storedUser = null;
   const refreshTokens = [];
+  const verificationTokens = [];
   const refreshRepository = {
     create: (data) => ({ id: `refresh-${refreshTokens.length + 1}`, ...data }),
     save: async (token) => {
@@ -117,11 +119,34 @@ test("auth register, login and profile flow", { concurrency: false }, async (t) 
       return token;
     },
   };
+  const verificationRepository = {
+    create: (data) => ({ id: `verification-${verificationTokens.length + 1}`, ...data }),
+    save: async (token) => {
+      verificationTokens.push(token);
+      return token;
+    },
+  };
   AppDataSource.getRepository = (name) => {
     if (name === "User") return repository;
     if (name === "RefreshToken") return refreshRepository;
+    if (name === "EmailVerificationToken") return verificationRepository;
     return originalGetRepository.call(AppDataSource, name);
   };
+  AppDataSource.createQueryRunner = () => ({
+    manager: {
+      getRepository: (name) => {
+        if (name === "User") return repository;
+        if (name === "EmailVerificationToken") return verificationRepository;
+        return AppDataSource.getRepository(name);
+      },
+    },
+    connect: async () => {},
+    startTransaction: async () => {},
+    commitTransaction: async () => {},
+    rollbackTransaction: async () => {},
+    release: async () => {},
+    isTransactionActive: true,
+  });
   repository.findOne = async ({ where }) => {
     if (where.email) return storedUser?.email === where.email ? storedUser : null;
     if (where.id) return storedUser?.id === where.id ? storedUser : null;
@@ -135,6 +160,7 @@ test("auth register, login and profile flow", { concurrency: false }, async (t) 
   t.after(() => {
     Object.assign(repository, originals);
     AppDataSource.getRepository = originalGetRepository;
+    AppDataSource.createQueryRunner = originalCreateQueryRunner;
   });
 
   const app = routeApp("/api/auth", authRoutes);
@@ -145,10 +171,11 @@ test("auth register, login and profile flow", { concurrency: false }, async (t) 
     role: "admin",
   });
   assert.equal(register.status, 201);
-  assert.equal(register.body.user.email, "new@example.com");
-  assert.equal(register.body.user.role, "customer");
-  assert.equal("password_hash" in register.body.user, false);
+  assert.equal(register.body.email, "new@example.com");
+  assert.equal(register.body.emailSent, false);
+  assert.ok(register.body.verificationToken);
   assert.equal(await bcrypt.compare("StrongPass123", storedUser.password_hash), true);
+  assert.equal(storedUser.email_verified_at, null);
 
   const invalidLogin = await request(app).post("/api/auth/login").send({
     email: "new@example.com",
@@ -156,6 +183,15 @@ test("auth register, login and profile flow", { concurrency: false }, async (t) 
   });
   assert.equal(invalidLogin.status, 401);
   assert.equal(invalidLogin.body.code, "INVALID_CREDENTIALS");
+
+  const unverifiedLogin = await request(app).post("/api/auth/login").send({
+    email: "new@example.com",
+    password: "StrongPass123",
+  });
+  assert.equal(unverifiedLogin.status, 403);
+  assert.equal(unverifiedLogin.body.code, "EMAIL_NOT_VERIFIED");
+
+  storedUser.email_verified_at = new Date();
 
   const login = await request(app).post("/api/auth/login").send({
     email: "new@example.com",

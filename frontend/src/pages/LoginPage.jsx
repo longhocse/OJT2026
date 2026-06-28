@@ -45,6 +45,7 @@ const AuthForm = ({ mode }) => {
   const isLogin = mode === "login";
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState("");
+  const [notice, setNotice] = useState("");
   const { login, register: registerUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -62,8 +63,13 @@ const AuthForm = ({ mode }) => {
 
   const submit = async (values) => {
     setFormError("");
+    setNotice("");
     try {
       const response = isLogin ? await login(values) : await registerUser(values);
+      if (!isLogin) {
+        setNotice(response.message || "Đăng ký thành công. Vui lòng kiểm tra email để xác thực.");
+        return;
+      }
       const requested = location.state?.from;
       navigate(
         typeof requested === "string" ? requested : response.user.role === "admin" ? "/admin" : "/",
@@ -83,6 +89,11 @@ const AuthForm = ({ mode }) => {
   return (
     <form onSubmit={handleSubmit(submit)} className="space-y-4" noValidate>
       <FormAlert message={formError} />
+      {notice && (
+        <p role="status" className="rounded-lg bg-green-500/10 p-3 text-sm text-green-500">
+          {notice}
+        </p>
+      )}
       {!isLogin && (
         <Field
           label="Họ tên"

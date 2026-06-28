@@ -26,6 +26,7 @@ export const queryKeys = {
   cinemas: {
     all: ["cinemas"],
     list: ["cinemas", "list"],
+    adminList: (params) => ["cinemas", "admin", "list", params],
     detail: (id) => ["cinemas", "detail", id],
   },
   rooms: {

@@ -9,6 +9,26 @@ const sanitizeReview = (review) => {
   return { ...review, user };
 };
 
+const withReviewCount = (movie) => ({
+  ...movie,
+  reviewCount: Array.isArray(movie.reviews) ? movie.reviews.length : Number(movie.reviewCount) || 0,
+});
+
+const attachReviewCounts = async (movies) => {
+  if (movies.length === 0) return movies;
+  const movieIds = movies.map((movie) => movie.id);
+  const rows = await AppDataSource.getRepository("Review")
+    .createQueryBuilder("review")
+    .innerJoin("review.movie", "movie")
+    .select("movie.id", "movieId")
+    .addSelect("COUNT(review.id)", "reviewCount")
+    .where("movie.id IN (:...movieIds)", { movieIds })
+    .groupBy("movie.id")
+    .getRawMany();
+  const counts = new Map(rows.map((row) => [String(row.movieId), Number(row.reviewCount) || 0]));
+  return movies.map((movie) => ({ ...movie, reviewCount: counts.get(String(movie.id)) || 0 }));
+};
+
 const resolveGenres = async (genreIds = []) => {
   if (genreIds.length === 0) return [];
   const genres = await AppDataSource.getRepository("Genre").find({
@@ -156,7 +176,11 @@ exports.getMovies = async (req, res) => {
     .skip((page - 1) * limit)
     .take(limit)
     .getManyAndCount();
-  res.json({ data: movies, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+  const moviesWithReviewCounts = await attachReviewCounts(movies);
+  res.json({
+    data: moviesWithReviewCounts.map(withReviewCount),
+    pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+  });
 };
 
 exports.getMovieById = async (req, res) => {
@@ -165,7 +189,7 @@ exports.getMovieById = async (req, res) => {
     relations: { genres: true, reviews: { user: true } },
   });
   if (!movie) throw new AppError(404, "MOVIE_NOT_FOUND", "Movie not found");
-  res.json({ ...movie, reviews: movie.reviews.map(sanitizeReview) });
+  res.json(withReviewCount({ ...movie, reviews: movie.reviews.map(sanitizeReview) }));
 };
 
 exports.createMovie = async (req, res) => {
@@ -283,15 +307,10 @@ const assertReviewEligibility = async (manager, userId, movieId) => {
     .innerJoin("show.movie", "bookedMovie")
     .where("bookingUser.id = :userId", { userId })
     .andWhere("bookedMovie.id = :movieId", { movieId })
-    .andWhere("booking.status IN (:...statuses)", { statuses: ["confirmed", "used"] })
-    .andWhere("show.end_time <= :now", { now: new Date() })
+    .andWhere("booking.status = :status", { status: "used" })
     .getOne();
   if (!eligible) {
-    throw new AppError(
-      403,
-      "REVIEW_NOT_ALLOWED",
-      "A completed confirmed or used booking is required to review this movie",
-    );
+    throw new AppError(403, "REVIEW_NOT_ALLOWED", "A used ticket is required to review this movie");
   }
 };
 
@@ -329,9 +348,12 @@ exports.addReview = async (req, res) => {
     });
     await repository.save(created);
     await recalculateMovieRating(manager, movie);
-    return created;
+    return repository.findOne({
+      where: { id: created.id },
+      relations: { user: true, movie: true },
+    });
   });
-  res.status(201).json(review);
+  res.status(201).json(sanitizeReview(review));
 };
 
 exports.updateReview = async (req, res) => {

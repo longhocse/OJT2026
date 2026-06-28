@@ -4,8 +4,17 @@ import { Star, Clock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import SafeImage from "./SafeImage";
 
+const formatRating = (rating) =>
+  Number(rating) > 0
+    ? new Intl.NumberFormat("vi-VN", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(Number(rating))
+    : "N/A";
+
 const MovieCard = ({ movie }) => {
   const navigate = useNavigate();
+  const reviewCount = Number(movie.reviewCount) || 0;
 
   return (
     <motion.div
@@ -23,9 +32,8 @@ const MovieCard = ({ movie }) => {
         />
         <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
           <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-          <span className="text-xs font-semibold text-white">
-            {movie.rating > 0 ? movie.rating.toFixed(1) : "N/A"}
-          </span>
+          <span className="text-xs font-semibold text-white">{formatRating(movie.rating)}</span>
+          {reviewCount > 0 && <span className="text-[10px] text-gray-200">({reviewCount})</span>}
         </div>
         {movie.status === "coming_soon" && (
           <div className="absolute bottom-2 left-2 bg-primary-600 text-white text-xs font-semibold px-2 py-1 rounded">

@@ -18,6 +18,7 @@ const NotFoundPage = lazy(() => import("../pages/NotFoundPage"));
 const ProfilePage = lazy(() => import("../pages/ProfilePage"));
 const ForgotPasswordPage = lazy(() => import("../pages/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("../pages/ResetPasswordPage"));
+const VerifyEmailPage = lazy(() => import("../pages/VerifyEmailPage"));
 
 const protectedPage = (Page) => (
   <ProtectedRoute>
@@ -42,6 +43,7 @@ export default function UserLayout() {
             <Route path="login" element={<LoginPage />} />
             <Route path="forgot-password" element={<ForgotPasswordPage />} />
             <Route path="reset-password" element={<ResetPasswordPage />} />
+            <Route path="verify-email" element={<VerifyEmailPage />} />
             <Route path="movies" element={<MoviesPage />} />
             <Route path="movie/:id" element={<MovieDetailPage />} />
             <Route path="booking/:showId" element={protectedPage(BookingPage)} />

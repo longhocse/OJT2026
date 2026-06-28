@@ -10,7 +10,7 @@ module.exports = new EntitySchema({
       generated: "uuid",
     },
     title: { type: "nvarchar", length: 200 },
-    description: { type: "text", nullable: true },
+    description: { type: "nvarchar", length: "MAX", nullable: true },
     rating: { type: "float", default: 0 },
     duration: { type: "int" },
     director: { type: "nvarchar", length: 200, nullable: true },

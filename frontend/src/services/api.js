@@ -41,6 +41,8 @@ const isCredentialRequest = (url = "") =>
     "/auth/refresh",
     "/auth/forgot-password",
     "/auth/reset-password",
+    "/auth/verify-email",
+    "/auth/resend-verification",
   ].some((path) => url.endsWith(path));
 
 api.interceptors.request.use((config) => {

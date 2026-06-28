@@ -15,7 +15,17 @@ export const authService = {
 
   async register(userData) {
     const response = await api.post("/auth/register", userData);
+    return response.data;
+  },
+
+  async verifyEmail(token) {
+    const response = await api.post("/auth/verify-email", { token });
     return normalizeAuthResponse(response.data);
+  },
+
+  async resendVerification(email) {
+    const response = await api.post("/auth/resend-verification", { email });
+    return response.data;
   },
 
   async getMe() {

@@ -3,8 +3,13 @@ const { AppDataSource } = require("../config/database");
 const { env } = require("../config/env");
 const { AppError } = require("../utils/AppError");
 const {
+  createEmailVerification,
+  isSmtpConfigured,
+  sendVerificationEmail,
+} = require("../services/emailVerificationService");
+const { createPasswordReset, sendPasswordResetEmail } = require("../services/passwordResetService");
+const {
   clearRefreshCookie,
-  createOpaqueToken,
   hashToken,
   issueSession,
   publicUser,
@@ -22,18 +27,49 @@ exports.register = async (req, res) => {
   if (await repository.findOne({ where: { email } })) {
     throw new AppError(409, "EMAIL_ALREADY_EXISTS", "Email is already registered");
   }
-  const user = repository.create({
+  const runner = AppDataSource.createQueryRunner();
+  await runner.connect();
+  await runner.startTransaction();
+  let user;
+  let verification;
+  try {
+    const userRepository = runner.manager.getRepository("User");
+    user = userRepository.create({
+      email,
+      password_hash: await bcrypt.hash(password, 12),
+      name,
+      phone: phone || null,
+      role: "customer",
+      is_active: true,
+      email_verified_at: null,
+    });
+    await userRepository.save(user);
+    verification = await createEmailVerification(user, runner.manager);
+    await runner.commitTransaction();
+  } catch (error) {
+    if (runner.isTransactionActive) await runner.rollbackTransaction();
+    throw error;
+  } finally {
+    await runner.release();
+  }
+
+  const emailQueued = env.NODE_ENV !== "test" && isSmtpConfigured();
+  if (emailQueued) {
+    void sendVerificationEmail(user, verification.verificationUrl).catch(() => undefined);
+  }
+
+  res.status(201).json({
+    message: emailQueued
+      ? "Registration successful. Please check your email to verify your account."
+      : "Registration successful. Email delivery is unavailable; use the local verification link.",
     email,
-    password_hash: await bcrypt.hash(password, 12),
-    name,
-    phone: phone || null,
-    role: "customer",
-    is_active: true,
+    emailSent: emailQueued,
+    ...(env.NODE_ENV !== "production" &&
+      !emailQueued && {
+        verificationToken: verification.rawToken,
+        verificationUrl: verification.verificationUrl,
+      }),
   });
-  await repository.save(user);
-  res
-    .status(201)
-    .json({ message: "User registered successfully", ...(await issueSession(user, res)) });
 };
 
 exports.login = async (req, res) => {
@@ -43,7 +79,74 @@ exports.login = async (req, res) => {
     throw new AppError(401, "INVALID_CREDENTIALS", "Invalid credentials");
   }
   if (user.is_active === false) throw new AppError(403, "ACCOUNT_LOCKED", "Account is locked");
+  if (!user.email_verified_at) {
+    throw new AppError(403, "EMAIL_NOT_VERIFIED", "Please verify your email before logging in");
+  }
   res.json({ message: "Login successful", ...(await issueSession(user, res)) });
+};
+
+exports.verifyEmail = async (req, res) => {
+  const runner = AppDataSource.createQueryRunner();
+  await runner.connect();
+  await runner.startTransaction("SERIALIZABLE");
+  try {
+    const tokenRepository = runner.manager.getRepository("EmailVerificationToken");
+    const verificationToken = await tokenRepository.findOne({
+      where: { token_hash: hashToken(res.locals.validated.body.token) },
+      relations: { user: true },
+      lock: { mode: "pessimistic_write" },
+    });
+    if (!verificationToken || verificationToken.used_at) {
+      throw new AppError(400, "EMAIL_VERIFICATION_TOKEN_INVALID", "Verification token is invalid");
+    }
+    if (new Date(verificationToken.expires_at) <= new Date()) {
+      throw new AppError(400, "EMAIL_VERIFICATION_TOKEN_EXPIRED", "Verification token has expired");
+    }
+    if (verificationToken.user.is_active === false) {
+      throw new AppError(403, "ACCOUNT_LOCKED", "Account is locked");
+    }
+    verificationToken.used_at = new Date();
+    verificationToken.user.email_verified_at ||= new Date();
+    await runner.manager.getRepository("User").save(verificationToken.user);
+    await tokenRepository.save(verificationToken);
+    await runner.commitTransaction();
+    res.json({
+      message: "Email verified successfully",
+      ...(await issueSession(verificationToken.user, res)),
+    });
+  } catch (error) {
+    if (runner.isTransactionActive) await runner.rollbackTransaction();
+    throw error;
+  } finally {
+    await runner.release();
+  }
+};
+
+exports.resendVerification = async (req, res) => {
+  const user = await getUserRepository().findOne({
+    where: { email: res.locals.validated.body.email },
+  });
+  let verification;
+  let emailSent = false;
+  if (user?.is_active !== false && !user?.email_verified_at) {
+    verification = await createEmailVerification(user);
+    try {
+      const result = await sendVerificationEmail(user, verification.verificationUrl);
+      emailSent = Boolean(result.sent);
+    } catch (_error) {
+      emailSent = false;
+    }
+  }
+  res.json({
+    message: "If the account needs verification, a new verification email has been sent",
+    emailSent,
+    ...(verification &&
+      env.NODE_ENV !== "production" &&
+      (!emailSent || !isSmtpConfigured()) && {
+        verificationToken: verification.rawToken,
+        verificationUrl: verification.verificationUrl,
+      }),
+  });
 };
 
 exports.refresh = async (req, res) => {
@@ -113,22 +216,21 @@ exports.forgotPassword = async (req, res) => {
   const user = await getUserRepository().findOne({
     where: { email: res.locals.validated.body.email },
   });
-  let developmentResetToken;
+  let emailSent = false;
   if (user?.is_active !== false) {
-    const rawToken = createOpaqueToken();
-    const repository = AppDataSource.getRepository("PasswordResetToken");
-    await repository.save(
-      repository.create({
-        user,
-        token_hash: hashToken(rawToken),
-        expires_at: new Date(Date.now() + env.PASSWORD_RESET_TTL_MINUTES * 60000),
-      }),
-    );
-    if (env.NODE_ENV !== "production") developmentResetToken = rawToken;
+    const passwordReset = await createPasswordReset(user);
+    if (env.NODE_ENV !== "test") {
+      try {
+        const result = await sendPasswordResetEmail(user, passwordReset.resetUrl);
+        emailSent = Boolean(result.sent);
+      } catch (_error) {
+        emailSent = false;
+      }
+    }
   }
   res.json({
-    message: "If the account exists, password reset instructions have been created",
-    ...(developmentResetToken && { resetToken: developmentResetToken }),
+    message: "If the account exists, password reset instructions have been sent",
+    emailSent,
   });
 };
 

@@ -84,6 +84,7 @@ test("refresh token rotation detects reuse and revokes the token family", async 
       name: "User",
       role: "customer",
       is_active: true,
+      email_verified_at: new Date(),
     },
   };
   records.push(current);
@@ -182,6 +183,65 @@ test("expired password reset tokens are rejected", async (t) => {
   });
   assert.equal(response.status, 400);
   assert.equal(response.body.code, "RESET_TOKEN_EXPIRED");
+});
+
+test("forgot password creates a hashed reset token without exposing it", async (t) => {
+  const original = AppDataSource.getRepository;
+  const user = {
+    id: USER_ID,
+    email: "reset@example.com",
+    name: "Reset User",
+    is_active: true,
+  };
+  const createdTokens = [];
+  let oldTokensRevoked = false;
+  const resetRepository = {
+    createQueryBuilder: () => ({
+      update() {
+        return this;
+      },
+      set() {
+        return this;
+      },
+      where() {
+        return this;
+      },
+      andWhere() {
+        return this;
+      },
+      async execute() {
+        oldTokensRevoked = true;
+      },
+    }),
+    create: (data) => ({ id: `reset-${createdTokens.length + 1}`, ...data }),
+    save: async (value) => {
+      createdTokens.push(value);
+      return value;
+    },
+  };
+  AppDataSource.getRepository = (name) => {
+    if (name === "User") return { findOne: async () => user };
+    if (name === "PasswordResetToken") return resetRepository;
+    return original.call(AppDataSource, name);
+  };
+  t.after(() => {
+    AppDataSource.getRepository = original;
+  });
+
+  const response = await request(app).post("/api/auth/forgot-password").send({
+    email: user.email,
+  });
+  assert.equal(response.status, 200);
+  assert.equal(
+    response.body.message,
+    "If the account exists, password reset instructions have been sent",
+  );
+  assert.equal(response.body.emailSent, false);
+  assert.equal("resetToken" in response.body, false);
+  assert.equal(oldTokensRevoked, true);
+  assert.equal(createdTokens.length, 1);
+  assert.equal(createdTokens[0].user, user);
+  assert.match(createdTokens[0].token_hash, /^[a-f0-9]{64}$/);
 });
 
 test("profile owner can update safe fields", async (t) => {

@@ -1,5 +1,6 @@
 import {
   normalizeGenre,
+  normalizePagination,
   normalizeScreen,
   normalizeTheater,
   normalizeUser,
@@ -43,6 +44,14 @@ export const catalogService = {
     return Array.isArray(response.data) ? response.data.map(normalizeTheater) : [];
   },
 
+  async getAdminCinemas(params = {}) {
+    const response = await api.get("/cinemas/admin/list", { params });
+    return {
+      data: Array.isArray(response.data.data) ? response.data.data.map(normalizeTheater) : [],
+      pagination: normalizePagination(response.data.pagination),
+    };
+  },
+
   async getCinemaById(id) {
     const response = await api.get(`/cinemas/${id}`);
     return normalizeTheater(response.data);
@@ -61,6 +70,16 @@ export const catalogService = {
   async deleteCinema(id) {
     const response = await api.delete(`/cinemas/${id}`);
     return response.data;
+  },
+
+  async deactivateCinema(id) {
+    const response = await api.patch(`/cinemas/${id}/deactivate`);
+    return normalizeTheater(response.data);
+  },
+
+  async restoreCinema(id) {
+    const response = await api.patch(`/cinemas/${id}/restore`);
+    return normalizeTheater(response.data);
   },
 
   async getRooms(params = {}) {

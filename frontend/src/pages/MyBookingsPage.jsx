@@ -1,9 +1,11 @@
-import React, { useRef, useState } from "react";
+import QRCode from "qrcode";
+import React, { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { bookingKeys, bookingService } from "../services/bookingService";
 import { normalizeApiError } from "../services/apiError";
+import { paymentService } from "../services/paymentService";
 import SafeImage from "../components/common/SafeImage";
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
@@ -48,6 +50,7 @@ const MyBookingsPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [notice, setNotice] = useState(null);
+  const [ticketModal, setTicketModal] = useState(null);
   const cancellationInFlight = useRef(false);
 
   const bookingsQuery = useQuery({
@@ -70,6 +73,24 @@ const MyBookingsPage = () => {
     },
     onSettled: () => {
       cancellationInFlight.current = false;
+    },
+  });
+
+  const ticketMutation = useMutation({
+    mutationFn: paymentService.getTicket,
+    onSuccess: (ticket) => {
+      setTicketModal(ticket);
+      setNotice(null);
+    },
+    onError: (error) => {
+      const apiError = normalizeApiError(error);
+      const message =
+        apiError.status === 403
+          ? "Bạn không có quyền xem vé này."
+          : apiError.status === 400
+            ? "Vé chỉ hiển thị sau khi booking đã được xác nhận thanh toán."
+            : "Không thể tải mã QR vé. Vui lòng thử lại.";
+      setNotice({ type: "error", message });
     },
   });
 
@@ -144,10 +165,14 @@ const MyBookingsPage = () => {
               cancelDisabled={cancelMutation.isPending}
               onCancel={handleCancel}
               onBookAgain={() => navigate(`/movie/${booking.show?.movie?.id || ""}`)}
+              onReviewMovie={() => navigate(`/movie/${booking.show?.movie?.id || ""}#reviews`)}
+              onViewTicket={() => ticketMutation.mutate(booking.id)}
+              ticketLoading={ticketMutation.isPending && ticketMutation.variables === booking.id}
             />
           ))}
         </div>
       )}
+      {ticketModal && <TicketModal ticket={ticketModal} onClose={() => setTicketModal(null)} />}
     </PageShell>
   );
 };
@@ -169,8 +194,19 @@ const BookingListSkeleton = () => (
   </PageShell>
 );
 
-const BookingCard = ({ booking, cancelling, cancelDisabled, onCancel, onBookAgain }) => {
+const BookingCard = ({
+  booking,
+  cancelling,
+  cancelDisabled,
+  onCancel,
+  onBookAgain,
+  onReviewMovie,
+  onViewTicket,
+  ticketLoading,
+}) => {
   const canCancel = canCancelBooking(booking);
+  const canViewTicket = ["confirmed", "used"].includes(booking.status);
+  const canReview = booking.status === "used" && Boolean(booking.show?.movie?.id);
   const showTime = new Date(booking.show?.start_time).getTime();
   const isWithinCancellationWindow =
     booking.status === "confirmed" &&
@@ -216,6 +252,16 @@ const BookingCard = ({ booking, cancelling, cancelDisabled, onCancel, onBookAgai
         )}
       </div>
       <div className="flex flex-col justify-center gap-2">
+        {canViewTicket && (
+          <button
+            type="button"
+            onClick={onViewTicket}
+            disabled={ticketLoading}
+            className="rounded-lg bg-primary px-4 py-2 font-semibold text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {ticketLoading ? "Đang tải vé..." : "Xem vé QR"}
+          </button>
+        )}
         {canCancel && (
           <button
             type="button"
@@ -224,6 +270,15 @@ const BookingCard = ({ booking, cancelling, cancelDisabled, onCancel, onBookAgai
             className="rounded-lg border border-error px-4 py-2 text-error hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {cancelling ? "Đang hủy..." : "Hủy booking"}
+          </button>
+        )}
+        {canReview && (
+          <button
+            type="button"
+            onClick={onReviewMovie}
+            className="rounded-lg border border-primary px-4 py-2 font-semibold text-primary hover:bg-primary/10"
+          >
+            Đánh giá phim
           </button>
         )}
         {booking.show?.movie?.id && (
@@ -237,6 +292,99 @@ const BookingCard = ({ booking, cancelling, cancelDisabled, onCancel, onBookAgai
         )}
       </div>
     </article>
+  );
+};
+
+const TicketModal = ({ ticket, onClose }) => {
+  const [qrUrl, setQrUrl] = useState("");
+  const checkedInText = ticket.checkedInAt ? formatShowTime(ticket.checkedInAt) : "Chưa check-in";
+
+  useEffect(() => {
+    let active = true;
+    QRCode.toDataURL(ticket.qrPayload, {
+      errorCorrectionLevel: "M",
+      margin: 2,
+      scale: 8,
+      width: 260,
+    })
+      .then((dataUrl) => {
+        if (active) setQrUrl(dataUrl);
+      })
+      .catch(() => {
+        if (active) setQrUrl("");
+      });
+    return () => {
+      active = false;
+    };
+  }, [ticket.qrPayload]);
+
+  const copyPayload = async () => {
+    try {
+      await navigator.clipboard.writeText(ticket.qrPayload);
+      window.alert("Đã copy payload QR.");
+    } catch (_error) {
+      window.alert("Không thể copy tự động, bạn có thể copy thủ công trong ô payload.");
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Vé QR"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+    >
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface-container p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold">Vé QR</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Đưa mã này cho nhân viên rạp để check-in.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-white/10 px-3 py-1 text-sm hover:bg-white/20"
+          >
+            Đóng
+          </button>
+        </div>
+
+        <div className="mt-6 flex flex-col items-center rounded-xl bg-white p-4">
+          {qrUrl ? (
+            <img src={qrUrl} alt={`QR vé ${ticket.ticketCode}`} className="h-64 w-64" />
+          ) : (
+            <div className="flex h-64 w-64 items-center justify-center rounded bg-gray-100 p-4 text-center text-sm text-gray-600">
+              Không thể tạo ảnh QR. Bạn vẫn có thể copy payload bên dưới để nhân viên nhập thủ công.
+            </div>
+          )}
+        </div>
+
+        <dl className="mt-5 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+          <BookingDetail label="Mã vé" value={ticket.ticketCode || "Chưa có thông tin"} />
+          <BookingDetail label="Trạng thái" value={ticket.status || "Không xác định"} />
+          <BookingDetail label="Check-in" value={checkedInText} />
+        </dl>
+
+        <label className="mt-5 block text-sm font-semibold">
+          Payload QR
+          <textarea
+            readOnly
+            value={ticket.qrPayload}
+            rows="4"
+            className="mt-2 w-full rounded-lg border border-white/20 bg-black/20 p-3 font-mono text-xs"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={copyPayload}
+          className="mt-3 w-full rounded-lg border border-primary px-4 py-2 font-semibold text-primary hover:bg-primary/10"
+        >
+          Copy payload
+        </button>
+      </div>
+    </div>
   );
 };
 

@@ -22,7 +22,7 @@ module.exports = new EntitySchema({
       generated: "uuid",
     },
     rating: { type: "float" },
-    comment: { type: "text", nullable: true },
+    comment: { type: "nvarchar", length: "MAX", nullable: true },
     created_at: { type: "datetime", createDate: true },
     updated_at: { type: "datetime2", updateDate: true },
   },

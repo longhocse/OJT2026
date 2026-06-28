@@ -206,6 +206,19 @@ module.exports = {
         .regex(/[0-9]/, "Must contain a number"),
     }),
   }),
+  verifyEmail: validateRequest({
+    body: z.object({
+      token: z.string().min(32).max(256),
+    }),
+  }),
+  resendVerification: validateRequest({
+    body: z.object({
+      email: z
+        .email()
+        .max(255)
+        .transform((value) => value.toLowerCase()),
+    }),
+  }),
   movieList: validateRequest({
     query: z.object({
       genre: z.string().trim().max(100).optional(),
@@ -241,6 +254,13 @@ module.exports = {
   cinemaUpdate: validateRequest({
     body: cinema.partial().refine((value) => Object.keys(value).length > 0, {
       message: "At least one cinema field is required",
+    }),
+  }),
+  adminCinemaList: validateRequest({
+    query: z.object({
+      ...pagination,
+      search: z.string().trim().max(100).optional(),
+      status: z.enum(["active", "inactive", "all"]).optional(),
     }),
   }),
   genreCreate: validateRequest({ body: genre }),

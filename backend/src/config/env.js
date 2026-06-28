@@ -29,6 +29,17 @@ const envSchema = z
       .regex(/^\d+[smhd]$/)
       .default("7d"),
     PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
+    EMAIL_VERIFICATION_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(60),
+    FRONTEND_URL: z.string().url().default("http://localhost:3000"),
+    SMTP_HOST: z.string().min(1).optional(),
+    SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional(),
+    SMTP_SECURE: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
+    SMTP_USER: z.string().min(1).optional(),
+    SMTP_PASS: z.string().min(1).optional(),
+    MAIL_FROM: z.string().min(1).optional(),
     SHOW_CLEANING_BUFFER_MINUTES: z.coerce.number().int().min(0).max(180).default(15),
     PAYMENT_PROVIDER_MODE: z.enum(["mock"]).default("mock"),
     PAYMENT_WEBHOOK_SECRET: z.string().min(32),
@@ -67,6 +78,14 @@ const envSchema = z
           message: `Invalid origin: ${origin}`,
         });
       }
+    }
+    const mailFields = [data.SMTP_HOST, data.SMTP_PORT, data.SMTP_USER, data.SMTP_PASS];
+    if (mailFields.some(Boolean) && mailFields.some((value) => value === undefined)) {
+      context.addIssue({
+        code: "custom",
+        path: ["SMTP_HOST"],
+        message: "SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASS must be provided together",
+      });
     }
   });
 

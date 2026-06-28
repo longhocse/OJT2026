@@ -11,6 +11,7 @@ jest.mock("../services/authService", () => ({
   authService: {
     login: jest.fn(),
     register: jest.fn(),
+    verifyEmail: jest.fn(),
     getMe: jest.fn(),
     logout: jest.fn(() => Promise.resolve()),
   },
@@ -79,14 +80,18 @@ describe("useAuth", () => {
     });
   });
 
-  test("register stores credentials and logout purges the client session", async () => {
-    const response = { token: "registered-token", user: { id: "user-2", role: "customer" } };
+  test("register waits for verification; verifyEmail stores credentials; logout purges session", async () => {
+    const response = { message: "Check email", emailSent: true };
+    const verified = { token: "verified-token", user: { id: "user-2", role: "customer" } };
     authService.register.mockResolvedValue(response);
+    authService.verifyEmail.mockResolvedValue(verified);
     const { result, store } = renderAuthHook();
     await act(async () =>
       result.current.register({ email: "new@example.com", password: "Password1" }),
     );
-    expect(store.getState().auth.token).toBe("registered-token");
+    expect(store.getState().auth.token).toBeNull();
+    await act(async () => result.current.verifyEmail("verify-token"));
+    expect(store.getState().auth.token).toBe("verified-token");
     await act(async () => result.current.logout());
     expect(clearClientSession).toHaveBeenCalledTimes(1);
   });

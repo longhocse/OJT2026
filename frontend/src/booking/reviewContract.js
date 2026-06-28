@@ -5,7 +5,7 @@ export const getReviewSubmissionState = (error) => {
   if (apiError.code === "REVIEW_NOT_ALLOWED" || apiError.status === 403) {
     return {
       kind: "not-eligible",
-      message: "Bạn cần có booking đã xác nhận cho phim này trước khi có thể đánh giá.",
+      message: "Bạn cần có vé đã check-in/đã dùng cho phim này trước khi có thể đánh giá.",
     };
   }
   if (apiError.status === 409) {

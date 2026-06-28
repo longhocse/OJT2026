@@ -2,16 +2,26 @@
 const express = require("express");
 const {
   getCinemas,
+  getAdminCinemas,
   getCinemaById,
   createCinema,
   updateCinema,
   deleteCinema,
+  deactivateCinema,
+  restoreCinema,
 } = require("../controllers/cinemaController");
 const { authMiddleware, adminMiddleware } = require("../middleware/authMiddleware");
 const validation = require("../middleware/apiValidation");
 
 const router = express.Router();
 
+router.get(
+  "/admin/list",
+  authMiddleware,
+  adminMiddleware,
+  validation.adminCinemaList,
+  getAdminCinemas,
+);
 router.get("/", getCinemas);
 router.get("/:id", validation.idParam(), getCinemaById);
 router.post("/", authMiddleware, adminMiddleware, validation.cinemaCreate, createCinema);
@@ -23,6 +33,14 @@ router.put(
   validation.cinemaUpdate,
   updateCinema,
 );
+router.patch(
+  "/:id/deactivate",
+  authMiddleware,
+  adminMiddleware,
+  validation.idParam(),
+  deactivateCinema,
+);
+router.patch("/:id/restore", authMiddleware, adminMiddleware, validation.idParam(), restoreCinema);
 router.delete("/:id", authMiddleware, adminMiddleware, validation.idParam(), deleteCinema);
 
 module.exports = router;

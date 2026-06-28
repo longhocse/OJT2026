@@ -51,6 +51,7 @@ const AdminCinemaForm = () => {
     mutationFn: (data) =>
       id ? catalogService.updateCinema(id, data) : catalogService.createCinema(data),
   });
+  const isLoadingCinema = Boolean(id) && cinemaQuery.isPending;
   const submit = async (data) => {
     setFormError("");
     try {
@@ -74,7 +75,7 @@ const AdminCinemaForm = () => {
         <button type="button" aria-label="Quay lại" onClick={() => navigate("/admin/cinemas")}>
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="text-2xl font-bold">{id ? "Sửa rạp" : "Thêm rạp mới"}</h1>
+        <h1 className="text-2xl font-bold">{id ? "Sửa chi nhánh" : "Thêm chi nhánh mới"}</h1>
       </div>
       {cinemaQuery.isError ? (
         <FormAlert message="Không thể tải thông tin rạp." />
@@ -104,7 +105,7 @@ const AdminCinemaForm = () => {
           </div>
           <button
             type="submit"
-            disabled={isSubmitting || mutation.isPending || cinemaQuery.isPending}
+            disabled={isSubmitting || mutation.isPending || isLoadingCinema}
             className="flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white disabled:opacity-50 md:col-span-2"
           >
             <Save className="h-4 w-4" />

@@ -20,6 +20,7 @@ const expectedEntities = [
   "Payment",
   "RefreshToken",
   "PasswordResetToken",
+  "EmailVerificationToken",
   "AuditLog",
 ];
 

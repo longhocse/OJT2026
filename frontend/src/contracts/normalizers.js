@@ -38,6 +38,7 @@ export const normalizeUser = (value) => {
     phone: nullableText(raw.phone),
     role: text(raw.role, "customer"),
     is_active: raw.is_active !== false,
+    email_verified_at: nullableDate(raw.email_verified_at),
     created_at: nullableDate(raw.created_at),
   };
 };
@@ -79,6 +80,12 @@ export const normalizeMovie = (value) => {
     status: text(raw.status, "coming_soon"),
     created_at: nullableDate(raw.created_at),
     reviews: Array.isArray(raw.reviews) ? raw.reviews.map(normalizeReview) : [],
+    reviewCount:
+      raw.reviewCount === undefined
+        ? Array.isArray(raw.reviews)
+          ? raw.reviews.length
+          : 0
+        : number(raw.reviewCount, "Movie", "reviewCount"),
   };
 };
 
@@ -110,6 +117,7 @@ export const normalizeTheater = (value, { includeScreens = true } = {}) => {
     address: nullableText(raw.address),
     city: nullableText(raw.city),
     phone: nullableText(raw.phone),
+    is_active: raw.is_active !== false,
     screens:
       includeScreens && Array.isArray(raw.screens)
         ? raw.screens.map((screen) => normalizeScreen(screen, { includeTheater: false }))

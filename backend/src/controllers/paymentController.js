@@ -9,6 +9,7 @@ const {
   withTransaction,
 } = require("../services/paymentLifecycleService");
 const { recordAuditLog } = require("../services/auditLogService");
+const { sendTicketEmailForBooking } = require("../services/ticketEmailService");
 const removeSensitiveFields = (value) => {
   if (value instanceof Date || value == null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map(removeSensitiveFields);
@@ -33,6 +34,17 @@ const safe = (payment) => ({
   booking: removeSensitiveFields(payment.booking),
 });
 
+const notifyTicketIfConfirmed = async (result) => {
+  if (
+    result?.idempotent ||
+    result?.payment?.status !== "paid" ||
+    result?.booking?.status !== "confirmed"
+  ) {
+    return;
+  }
+  await sendTicketEmailForBooking(result.booking.id);
+};
+
 exports.handleWebhook = async (req, res) => {
   if (
     !verifyWebhook({
@@ -45,6 +57,7 @@ exports.handleWebhook = async (req, res) => {
   if (req.params.provider !== "mock")
     throw new AppError(404, "PAYMENT_PROVIDER_NOT_FOUND", "Provider not found");
   const result = await processPaymentEvent(req.body);
+  await notifyTicketIfConfirmed(result);
   res.json({ received: true, idempotent: result.idempotent, status: result.payment.status });
 };
 exports.getPayment = async (req, res) => {
@@ -76,6 +89,7 @@ exports.completeMockPayment = async (req, res) => {
   if (!verifyWebhook({ timestamp, signature: signWebhook(timestamp, body), body }))
     throw new AppError(500, "MOCK_SIGNATURE_FAILED", "Signature failed");
   const result = await processPaymentEvent(body);
+  await notifyTicketIfConfirmed(result);
   res.json({ payment: safe(result.payment), bookingStatus: result.booking.status });
 };
 exports.getAdminPayments = async (req, res) => {
@@ -142,6 +156,11 @@ exports.confirmCashPayment = async (req, res) => {
     resourceType: "Payment",
     resourceId: result.payment.id,
     metadata: { idempotent: result.idempotent === true },
+  });
+  await notifyTicketIfConfirmed({
+    payment: result.payment,
+    booking: result.payment.booking,
+    idempotent: result.idempotent,
   });
   res.json({ payment: safe(result.payment), idempotent: result.idempotent });
 };

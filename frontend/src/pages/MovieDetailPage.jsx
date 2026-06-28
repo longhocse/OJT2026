@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
-import { Star, Clock, Calendar, Tag, User, Ticket } from "lucide-react";
+import { Star, Clock, Calendar, Tag, User, Ticket, MapPin, Monitor } from "lucide-react";
 import { movieService } from "../services/movieService";
 import { bookingService } from "../services/bookingService";
 import Button from "../components/common/Button";
@@ -16,6 +16,107 @@ import SafeImage from "../components/common/SafeImage";
 import { getSafeResourceUrl, getSafeYouTubeEmbedUrl } from "../utils/security";
 import { getReviewSubmissionState } from "../booking/reviewContract";
 
+const upsertReview = (reviews, review) => {
+  const list = Array.isArray(reviews) ? reviews : [];
+  const existingIndex = list.findIndex((item) => item.id === review.id);
+  if (existingIndex === -1) return [review, ...list];
+  return list.map((item, index) => (index === existingIndex ? review : item));
+};
+
+const removeReview = (reviews, reviewId) =>
+  Array.isArray(reviews) ? reviews.filter((review) => review.id !== reviewId) : [];
+
+const getReviewSummary = (reviews, fallbackRating = 0, fallbackCount = 0) => {
+  const list = Array.isArray(reviews) ? reviews : [];
+  if (list.length === 0) return { rating: Number(fallbackRating) || 0, count: fallbackCount || 0 };
+  const total = list.reduce((sum, review) => sum + Number(review.rating || 0), 0);
+  return { rating: total / list.length, count: list.length };
+};
+
+const formatRating = (rating) =>
+  Number(rating) > 0
+    ? new Intl.NumberFormat("vi-VN", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(Number(rating))
+    : "N/A";
+
+const StarBar = ({ rating, size = "w-4 h-4" }) => (
+  <div className="flex gap-1" aria-label={`${formatRating(rating)} sao`}>
+    {[1, 2, 3, 4, 5].map((star) => {
+      const fillPercent = Math.max(0, Math.min(1, Number(rating) - (star - 1))) * 100;
+      return (
+        <span key={star} className={`relative inline-block ${size}`}>
+          <Star className={`absolute inset-0 ${size} text-gray-300`} />
+          <span className="absolute inset-0 overflow-hidden" style={{ width: `${fillPercent}%` }}>
+            <Star className={`${size} text-yellow-400 fill-yellow-400`} />
+          </span>
+        </span>
+      );
+    })}
+  </div>
+);
+
+const toDateInputValue = (date) => {
+  const value = new Date(date);
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const buildDateOptions = (days = 21) =>
+  Array.from({ length: days }, (_, index) => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + index);
+    return {
+      value: toDateInputValue(date),
+      day: new Intl.DateTimeFormat("vi-VN", { day: "2-digit" }).format(date),
+      month: new Intl.DateTimeFormat("vi-VN", { month: "2-digit" }).format(date),
+      weekday: new Intl.DateTimeFormat("vi-VN", { weekday: "short" }).format(date),
+    };
+  });
+
+const showTime = (value) =>
+  new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+
+const groupShowsByTheater = (shows) => {
+  const theaters = new Map();
+  for (const show of shows || []) {
+    const theater = show.screen?.theater;
+    const theaterId = theater?.id || "unknown";
+    if (!theaters.has(theaterId)) {
+      theaters.set(theaterId, {
+        id: theaterId,
+        name: theater?.name || "Rạp",
+        address: theater?.address || "",
+        city: theater?.city || "Khác",
+        screens: new Map(),
+      });
+    }
+    const theaterGroup = theaters.get(theaterId);
+    const screenId = show.screen?.id || "unknown-screen";
+    if (!theaterGroup.screens.has(screenId)) {
+      theaterGroup.screens.set(screenId, {
+        id: screenId,
+        name: show.screen?.name || "Phòng chiếu",
+        shows: [],
+      });
+    }
+    theaterGroup.screens.get(screenId).shows.push(show);
+  }
+  return [...theaters.values()].map((theater) => ({
+    ...theater,
+    screens: [...theater.screens.values()].map((screen) => ({
+      ...screen,
+      shows: screen.shows.sort(
+        (left, right) => new Date(left.start_time) - new Date(right.start_time),
+      ),
+    })),
+  }));
+};
+
 const MovieDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -24,6 +125,9 @@ const MovieDetailPage = () => {
   const [reviewError, setReviewError] = useState("");
   const [reviewNotice, setReviewNotice] = useState("");
   const [reviewState, setReviewState] = useState("idle");
+  const dateOptions = useMemo(() => buildDateOptions(21), []);
+  const [selectedDate, setSelectedDate] = useState(dateOptions[0].value);
+  const [selectedCity, setSelectedCity] = useState("all");
   const reviewSubmittingRef = useRef(false);
   const {
     register: registerReview,
@@ -48,16 +152,48 @@ const MovieDetailPage = () => {
     enabled: Boolean(id),
   });
 
-  const { data: shows } = useQuery({
-    queryKey: queryKeys.shows.list({ movieId: id }),
+  const { data: shows = [], isLoading: isLoadingShows } = useQuery({
+    queryKey: queryKeys.shows.list({ movieId: id, date: selectedDate }),
+    queryFn: () => bookingService.getShows({ movieId: id, date: selectedDate }),
+    enabled: !!movie && movie.status === "now_showing",
+  });
+
+  const { data: movieShows = [] } = useQuery({
+    queryKey: queryKeys.shows.list({ movieId: id, scope: "date-indicators" }),
     queryFn: () => bookingService.getShows({ movieId: id }),
     enabled: !!movie && movie.status === "now_showing",
+  });
+
+  const { data: myBookings = [], isLoading: isLoadingMyBookings } = useQuery({
+    queryKey: queryKeys.bookings.mine,
+    queryFn: bookingService.getMyBookings,
+    enabled: Boolean(user?.id && id),
   });
 
   const reviewMutation = useMutation({
     mutationFn: ({ reviewId, data }) =>
       reviewId ? movieService.updateReview(id, reviewId, data) : movieService.addReview(id, data),
     onSuccess: async (result) => {
+      const review = {
+        ...result.review,
+        user: result.review.user || { id: user?.id, name: user?.name || "Bạn" },
+      };
+      let nextReviews = [];
+      queryClient.setQueryData(queryKeys.movies.reviews(id), (current = []) => {
+        nextReviews = upsertReview(current, review);
+        return nextReviews;
+      });
+      queryClient.setQueryData(queryKeys.movies.detail(id), (current) => {
+        if (!current) return current;
+        const updatedReviews = upsertReview(current.reviews || nextReviews, review);
+        const summary = getReviewSummary(updatedReviews, current.rating, current.reviewCount);
+        return {
+          ...current,
+          rating: summary.rating,
+          reviewCount: summary.count,
+          reviews: updatedReviews,
+        };
+      });
       setReviewNotice(
         result.created ? "Đánh giá đã được tạo." : "Đánh giá của bạn đã được cập nhật.",
       );
@@ -72,10 +208,63 @@ const MovieDetailPage = () => {
   });
 
   const reviews = reviewsQuery.data || movie?.reviews || [];
+  const datesWithShows = useMemo(
+    () => new Set(movieShows.map((show) => toDateInputValue(show.start_time))),
+    [movieShows],
+  );
+  const cityOptions = useMemo(
+    () => [
+      ...new Set(
+        shows
+          .map((show) => show.screen?.theater?.city)
+          .filter(Boolean)
+          .sort((left, right) => left.localeCompare(right)),
+      ),
+    ],
+    [shows],
+  );
+  const visibleShows = useMemo(
+    () =>
+      selectedCity === "all"
+        ? shows
+        : shows.filter((show) => show.screen?.theater?.city === selectedCity),
+    [selectedCity, shows],
+  );
+  const groupedShowtimes = useMemo(() => groupShowsByTheater(visibleShows), [visibleShows]);
+  const firstVisibleShow = visibleShows[0];
   const existingReview = user?.id ? reviews.find((review) => review.user?.id === user.id) : null;
+  const currentMovieId = String(id || "").toLowerCase();
+  const hasUsedTicketForMovie = myBookings.some(
+    (booking) =>
+      booking.status === "used" &&
+      String(booking.show?.movie?.id || "").toLowerCase() === currentMovieId,
+  );
+  const reviewNotAllowedByTicket = Boolean(user?.id && !hasUsedTicketForMovie);
+  const isReviewDisabled =
+    reviewMutation.isPending ||
+    isReviewSubmitting ||
+    reviewState === "not-eligible" ||
+    reviewNotAllowedByTicket;
   const deleteReviewMutation = useMutation({
     mutationFn: () => movieService.deleteReview(id, existingReview.id),
     onSuccess: async () => {
+      const deletedReviewId = existingReview.id;
+      let nextReviews = [];
+      queryClient.setQueryData(queryKeys.movies.reviews(id), (current = []) => {
+        nextReviews = removeReview(current, deletedReviewId);
+        return nextReviews;
+      });
+      queryClient.setQueryData(queryKeys.movies.detail(id), (current) => {
+        if (!current) return current;
+        const updatedReviews = removeReview(current.reviews, deletedReviewId);
+        const summary = getReviewSummary(updatedReviews);
+        return {
+          ...current,
+          rating: summary.rating,
+          reviewCount: summary.count,
+          reviews: updatedReviews,
+        };
+      });
       resetReview({ rating: 5, comment: "" });
       setReviewNotice("Đã xóa đánh giá của bạn.");
       await Promise.all([
@@ -87,11 +276,26 @@ const MovieDetailPage = () => {
   });
   const moderateReviewMutation = useMutation({
     mutationFn: (reviewId) => movieService.moderateReview(id, reviewId),
-    onSuccess: () =>
-      Promise.all([
+    onSuccess: (_result, reviewId) => {
+      queryClient.setQueryData(queryKeys.movies.reviews(id), (current = []) =>
+        removeReview(current, reviewId),
+      );
+      queryClient.setQueryData(queryKeys.movies.detail(id), (current) => {
+        if (!current) return current;
+        const updatedReviews = removeReview(current.reviews, reviewId);
+        const summary = getReviewSummary(updatedReviews);
+        return {
+          ...current,
+          rating: summary.rating,
+          reviewCount: summary.count,
+          reviews: updatedReviews,
+        };
+      });
+      return Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.movies.reviews(id) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.movies.detail(id) }),
-      ]),
+      ]);
+    },
     onError: (error) =>
       setReviewError(error.response?.data?.message || "Không thể moderation đánh giá."),
   });
@@ -101,13 +305,25 @@ const MovieDetailPage = () => {
     resetReview({ rating: existingReview.rating, comment: existingReview.comment || "" });
   }, [existingReview, resetReview]);
 
+  useEffect(() => {
+    if (hasUsedTicketForMovie && reviewState === "not-eligible") {
+      setReviewState("idle");
+      setReviewError("");
+    }
+  }, [hasUsedTicketForMovie, reviewState]);
+
+  useEffect(() => {
+    if (selectedCity !== "all" && !cityOptions.includes(selectedCity)) {
+      setSelectedCity("all");
+    }
+  }, [cityOptions, selectedCity]);
+
   const submitReview = async (values) => {
     if (!user) {
       navigate("/login");
       return;
     }
-    if (reviewSubmittingRef.current || reviewMutation.isPending || reviewState === "not-eligible")
-      return;
+    if (reviewSubmittingRef.current || isReviewDisabled) return;
     reviewSubmittingRef.current = true;
     setReviewError("");
     setReviewNotice("");
@@ -144,6 +360,7 @@ const MovieDetailPage = () => {
 
   const safePosterUrl = getSafeResourceUrl(movie.poster_url);
   const safeTrailerUrl = getSafeYouTubeEmbedUrl(movie.trailer_url);
+  const reviewSummary = getReviewSummary(reviews, movie.rating, movie.reviewCount);
 
   return (
     <div>
@@ -165,7 +382,10 @@ const MovieDetailPage = () => {
               <div className="flex flex-wrap gap-4 mb-4">
                 <div className="flex items-center gap-1 bg-black/50 px-3 py-1 rounded-full">
                   <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-                  <span>{movie.rating > 0 ? movie.rating.toFixed(1) : "N/A"}</span>
+                  <span>{formatRating(reviewSummary.rating)}</span>
+                  {reviewSummary.count > 0 && (
+                    <span className="text-xs text-gray-300">({reviewSummary.count} đánh giá)</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-1 bg-black/50 px-3 py-1 rounded-full">
                   <Clock className="w-4 h-4" />
@@ -219,37 +439,140 @@ const MovieDetailPage = () => {
             )}
 
             {/* Showtimes */}
-            {movie.status === "now_showing" && shows && shows.length > 0 && (
+            {movie.status === "now_showing" && (
               <div className="mb-8">
                 <h2 className="font-heading text-2xl font-bold mb-4">Suất chiếu</h2>
-                <div className="space-y-4">
-                  {shows.map((show) => (
-                    <div key={show.id} className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
-                      <div className="flex flex-wrap justify-between items-center">
-                        <div>
-                          <p className="font-semibold">{show.screen?.theater?.name || "Rạp"}</p>
-                          <p className="text-sm text-gray-500">
-                            {new Date(show.start_time).toLocaleString("vi-VN")}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <span className="text-lg font-bold text-primary-600">
-                            {show.price.toLocaleString()}đ
-                          </span>
-                          <Button size="sm" onClick={() => navigate(`/booking/${show.id}`)}>
-                            Chọn ghế
-                          </Button>
-                        </div>
-                      </div>
+                <section className="rounded-xl bg-gray-50 p-4 dark:bg-gray-800">
+                  <div className="overflow-x-auto pb-2">
+                    <div className="flex min-w-max gap-2">
+                      {dateOptions.map((date) => (
+                        <button
+                          key={date.value}
+                          type="button"
+                          onClick={() => setSelectedDate(date.value)}
+                          className={`relative rounded-lg border px-3 py-2 pr-6 text-left transition ${
+                            selectedDate === date.value
+                              ? "border-primary-600 bg-primary-600 text-white"
+                              : "border-gray-200 bg-white hover:border-primary-400 dark:border-gray-700 dark:bg-gray-900"
+                          }`}
+                        >
+                          {datesWithShows.has(date.value) && (
+                            <span
+                              aria-label="Ngày có suất chiếu"
+                              title="Ngày có suất chiếu"
+                              className="absolute right-1.5 top-1 flex h-3.5 w-5 items-center justify-center rounded-[2px] bg-red-600 text-[9px] leading-none text-yellow-300 shadow-sm"
+                            >
+                              ★
+                            </span>
+                          )}
+                          <span className="block text-xs opacity-75">{date.month}</span>
+                          <span className="text-2xl font-bold leading-none">{date.day}</span>
+                          <span className="ml-1 text-xs opacity-75">{date.weekday}</span>
+                        </button>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+
+                  <div className="my-4 border-t border-gray-200 dark:border-gray-700" />
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCity("all")}
+                      className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+                        selectedCity === "all"
+                          ? "bg-gray-900 text-white dark:bg-white dark:text-gray-950"
+                          : "border border-gray-200 hover:bg-white dark:border-gray-700 dark:hover:bg-gray-900"
+                      }`}
+                    >
+                      Tất cả tỉnh/thành
+                    </button>
+                    {cityOptions.map((city) => (
+                      <button
+                        key={city}
+                        type="button"
+                        onClick={() => setSelectedCity(city)}
+                        className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+                          selectedCity === city
+                            ? "bg-gray-900 text-white dark:bg-white dark:text-gray-950"
+                            : "border border-gray-200 hover:bg-white dark:border-gray-700 dark:hover:bg-gray-900"
+                        }`}
+                      >
+                        {city}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="my-4 border-t border-gray-200 dark:border-gray-700" />
+
+                  {isLoadingShows ? (
+                    <p role="status" className="py-8 text-center text-gray-500">
+                      Đang tải suất chiếu...
+                    </p>
+                  ) : groupedShowtimes.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center text-gray-500 dark:border-gray-700">
+                      Không có suất chiếu cho ngày/tỉnh đã chọn.
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      {groupedShowtimes.map((theater) => (
+                        <article
+                          key={theater.id}
+                          className="border-b pb-5 last:border-b-0 last:pb-0 dark:border-gray-700"
+                        >
+                          <div className="mb-3">
+                            <h3 className="text-lg font-semibold">{theater.name}</h3>
+                            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-500">
+                              <MapPin className="h-4 w-4" />
+                              <span>{theater.city}</span>
+                              {theater.address && <span>· {theater.address}</span>}
+                            </p>
+                          </div>
+                          <div className="space-y-4">
+                            {theater.screens.map((screen) => (
+                              <div key={screen.id}>
+                                <p className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                                  <Monitor className="h-4 w-4 text-gray-400" />
+                                  {screen.name}
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                  {screen.shows.map((show) => (
+                                    <button
+                                      key={show.id}
+                                      type="button"
+                                      onClick={() => navigate(`/booking/${show.id}`)}
+                                      className="rounded-lg border border-primary-500/40 bg-white px-4 py-2 text-left hover:bg-primary-50 dark:bg-gray-900 dark:hover:bg-gray-700"
+                                    >
+                                      <span className="block font-bold text-primary-600">
+                                        {showTime(show.start_time)}
+                                      </span>
+                                      <span className="text-xs text-gray-500">
+                                        {show.price.toLocaleString("vi-VN")}đ
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </section>
               </div>
             )}
 
             {/* Reviews Section */}
-            <div>
-              <h2 className="font-heading text-2xl font-bold mb-4">Đánh giá</h2>
+            <div id="reviews">
+              <h2 className="font-heading text-2xl font-bold mb-4">
+                Đánh giá
+                {reviewSummary.count > 0 && (
+                  <span className="ml-2 text-base font-normal text-gray-500">
+                    {formatRating(reviewSummary.rating)} sao · {reviewSummary.count} lượt
+                  </span>
+                )}
+              </h2>
               {user ? (
                 <form
                   onSubmit={handleReviewSubmit(submitReview)}
@@ -262,10 +585,17 @@ const MovieDetailPage = () => {
                       {reviewNotice}
                     </p>
                   )}
-                  <p className="mb-3 text-sm text-gray-500">
-                    Bạn cần có booking đã xác nhận cho phim này. Gửi lại sẽ cập nhật đánh giá hiện
-                    có thay vì tạo bản trùng.
-                  </p>
+                  {reviewNotAllowedByTicket ? (
+                    <p className="mb-3 rounded-lg bg-amber-500/10 p-3 text-sm text-amber-400">
+                      Bạn chỉ có thể đánh giá sau khi vé của phim này đã được check-in và chuyển
+                      sang trạng thái đã dùng.
+                    </p>
+                  ) : (
+                    <p className="mb-3 text-sm text-gray-500">
+                      Bạn cần có vé đã dùng cho phim này. Nếu đã từng đánh giá, gửi lại sẽ cập nhật
+                      đánh giá hiện có.
+                    </p>
+                  )}
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-sm font-medium">Đánh giá của bạn:</span>
                     <div className="flex gap-1">
@@ -274,11 +604,7 @@ const MovieDetailPage = () => {
                           key={r}
                           type="button"
                           onClick={() => setReviewValue("rating", r, { shouldValidate: true })}
-                          disabled={
-                            reviewMutation.isPending ||
-                            isReviewSubmitting ||
-                            reviewState === "not-eligible"
-                          }
+                          disabled={isReviewDisabled}
                           aria-label={`${r} sao`}
                           className="focus:outline-none"
                         >
@@ -303,11 +629,7 @@ const MovieDetailPage = () => {
                     placeholder="Chia sẻ cảm nhận của bạn về bộ phim..."
                     className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 resize-none"
                     rows="3"
-                    disabled={
-                      reviewMutation.isPending ||
-                      isReviewSubmitting ||
-                      reviewState === "not-eligible"
-                    }
+                    disabled={isReviewDisabled}
                   />
                   {reviewErrors.comment && (
                     <p role="alert" className="text-sm text-error">
@@ -318,11 +640,7 @@ const MovieDetailPage = () => {
                     type="submit"
                     className="mt-3"
                     isLoading={reviewMutation.isPending || isReviewSubmitting}
-                    disabled={
-                      reviewMutation.isPending ||
-                      isReviewSubmitting ||
-                      reviewState === "not-eligible"
-                    }
+                    disabled={isReviewDisabled || isLoadingMyBookings}
                   >
                     {existingReview ? "Cập nhật đánh giá" : "Gửi đánh giá"}
                   </Button>
@@ -342,7 +660,7 @@ const MovieDetailPage = () => {
               ) : (
                 <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-center mb-6">
                   <p className="mb-2 text-sm text-gray-500">
-                    Chỉ tài khoản có booking đã xác nhận cho phim này mới có thể đánh giá.
+                    Chỉ tài khoản có vé đã check-in/đã dùng cho phim này mới có thể đánh giá.
                   </p>
                   <p className="text-gray-600 dark:text-gray-400">
                     Đăng nhập để viết đánh giá{" "}
@@ -385,18 +703,7 @@ const MovieDetailPage = () => {
                           <User className="w-5 h-5 text-gray-400" />
                           <span className="font-medium">{review.user?.name || "Người dùng"}</span>
                         </div>
-                        <div className="flex gap-1">
-                          {[...Array(5)].map((_, i) => (
-                            <Star
-                              key={i}
-                              className={`w-4 h-4 ${
-                                i < Math.floor(review.rating)
-                                  ? "text-yellow-400 fill-yellow-400"
-                                  : "text-gray-300"
-                              }`}
-                            />
-                          ))}
-                        </div>
+                        <StarBar rating={review.rating} />
                       </div>
                       <p className="text-gray-700 dark:text-gray-300">{review.comment}</p>
                       <p className="text-xs text-gray-400 mt-2">
@@ -430,11 +737,11 @@ const MovieDetailPage = () => {
               <Button
                 className="w-full mb-3"
                 onClick={() => {
-                  if (movie.status === "now_showing" && shows?.length) {
-                    navigate(`/booking/${shows[0].id}`);
+                  if (movie.status === "now_showing" && firstVisibleShow) {
+                    navigate(`/booking/${firstVisibleShow.id}`);
                   }
                 }}
-                disabled={movie.status !== "now_showing"}
+                disabled={movie.status !== "now_showing" || !firstVisibleShow}
               >
                 <Ticket className="w-4 h-4" />
                 {movie.status === "now_showing" ? "Đặt vé ngay" : "Sắp chiếu"}

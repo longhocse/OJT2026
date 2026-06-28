@@ -27,5 +27,5 @@ test("renders a representative backend movie response after normalization", () =
   expect(screen.getByText("Contract Movie")).toBeInTheDocument();
   expect(screen.getByText("115 phút")).toBeInTheDocument();
   expect(screen.getByText("Drama")).toBeInTheDocument();
-  expect(screen.getByText("4.3")).toBeInTheDocument();
+  expect(screen.getByText("4,25")).toBeInTheDocument();
 });

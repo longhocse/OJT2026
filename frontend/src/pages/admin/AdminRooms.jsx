@@ -1,15 +1,18 @@
 import React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Edit, Plus, Trash2 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { catalogService } from "../../services/catalogService";
 import { queryKeys } from "../../services/queryKeys";
 
 const AdminRooms = () => {
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const cinemaId = searchParams.get("cinemaId") || "";
+  const roomParams = cinemaId ? { cinemaId } : {};
   const roomsQuery = useQuery({
-    queryKey: queryKeys.rooms.list({}),
-    queryFn: () => catalogService.getRooms(),
+    queryKey: queryKeys.rooms.list(roomParams),
+    queryFn: () => catalogService.getRooms(roomParams),
   });
   const deleteMutation = useMutation({
     mutationFn: catalogService.deleteRoom,
@@ -18,7 +21,14 @@ const AdminRooms = () => {
   return (
     <main className="mx-auto max-w-7xl p-6">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Quản lý phòng chiếu</h1>
+        <div>
+          <h1 className="text-2xl font-bold">Quản lý phòng chiếu</h1>
+          {cinemaId && (
+            <Link to="/admin/cinemas" className="mt-1 inline-block text-sm text-yellow-500">
+              Đang lọc theo chi nhánh · quay lại danh sách rạp
+            </Link>
+          )}
+        </div>
         <Link
           to="/admin/rooms/create"
           className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-white"

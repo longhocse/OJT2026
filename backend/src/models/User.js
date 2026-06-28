@@ -36,6 +36,10 @@ module.exports = new EntitySchema({
       type: "bit",
       default: true,
     },
+    email_verified_at: {
+      type: "datetime2",
+      nullable: true,
+    },
     created_at: {
       type: "datetime",
       createDate: true,
@@ -59,6 +63,11 @@ module.exports = new EntitySchema({
     },
     passwordResetTokens: {
       target: "PasswordResetToken",
+      type: "one-to-many",
+      inverseSide: "user",
+    },
+    emailVerificationTokens: {
+      target: "EmailVerificationToken",
       type: "one-to-many",
       inverseSide: "user",
     },
