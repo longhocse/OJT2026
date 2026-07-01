@@ -138,6 +138,29 @@ export const showSchema = z
     message: "Thời gian kết thúc phải sau thời gian bắt đầu.",
   });
 
+export const showBulkSchema = z
+  .object({
+    movie: relation,
+    screen: relation,
+    dateFrom: z.string().date("Ngày bắt đầu không hợp lệ."),
+    dateTo: z.string().date("Ngày kết thúc không hợp lệ."),
+    weekdays: z.array(z.coerce.number().int().min(0).max(6)).min(1, "Chọn ít nhất một thứ."),
+    startTimes: z
+      .array(z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Giờ chiếu phải có dạng HH:mm."))
+      .min(1, "Thêm ít nhất một giờ chiếu.")
+      .max(20, "Không tạo quá 20 khung giờ trong một batch."),
+    price: z.coerce.number().positive("Giá phải lớn hơn 0."),
+    conflictMode: z.enum(["skip", "fail"]),
+  })
+  .refine((value) => value.dateFrom <= value.dateTo, {
+    path: ["dateTo"],
+    message: "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu.",
+  })
+  .refine((value) => new Set(value.startTimes).size === value.startTimes.length, {
+    path: ["startTimes"],
+    message: "Giờ chiếu không được trùng nhau.",
+  });
+
 export const reviewSchema = z.object({
   rating: z.coerce.number().min(1, "Rating tối thiểu là 1.").max(5, "Rating tối đa là 5."),
   comment: optionalText(5000),

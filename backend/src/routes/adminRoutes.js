@@ -25,8 +25,9 @@ router.put(
 router.delete("/movies/:id", validation.idParam(), movieController.deleteMovie);
 
 router.get("/shows", validation.adminShowList, showController.getAdminShows);
-router.get("/shows/:id", validation.idParam(), showController.getAdminShowById);
 router.post("/shows", validation.showCreate, showController.createShow);
+router.post("/shows/bulk", validation.showBulkCreate, showController.createBulkShows);
+router.get("/shows/:id", validation.idParam(), showController.getAdminShowById);
 router.put("/shows/:id", validation.idParam(), validation.showUpdate, showController.updateShow);
 router.post(
   "/shows/:id/cancel",

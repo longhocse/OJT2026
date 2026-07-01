@@ -27,6 +27,27 @@ const dateRange = (date) => {
   return { start, end };
 };
 
+const dateOnly = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const datesBetween = (dateFrom, dateTo, weekdays) => {
+  const allowed = new Set(weekdays.map(Number));
+  const current = new Date(`${dateFrom}T00:00:00`);
+  const end = new Date(`${dateTo}T00:00:00`);
+  const result = [];
+  while (current <= end) {
+    if (allowed.has(current.getDay())) result.push(dateOnly(current));
+    current.setDate(current.getDate() + 1);
+  }
+  return result;
+};
+
+const showDateTime = (date, time) => new Date(`${date}T${time}:00`);
+
 const applyShowFilters = (qb, query, { admin = false } = {}) => {
   const { movieId, theaterId, screenId, date, status } = query;
   if (movieId) qb.andWhere("movie.id = :movieId", { movieId });
@@ -236,6 +257,96 @@ exports.createShow = async (req, res) => {
     metadata: { movieId: show.movie?.id, screenId: show.screen?.id },
   });
   res.status(201).json(serializeShow(show));
+};
+
+exports.createBulkShows = async (req, res) => {
+  const input = res.locals.validated.body;
+  const result = await withTransaction(async (manager) => {
+    const movie = await manager
+      .getRepository("Movie")
+      .findOneBy({ id: input.movie.id, is_active: true });
+    if (!movie) throw new AppError(404, "MOVIE_NOT_FOUND", "Movie not found");
+
+    const screen = await manager.getRepository("Screen").findOneBy({
+      id: input.screen.id,
+      is_active: true,
+    });
+    if (!screen) throw new AppError(404, "ROOM_NOT_FOUND", "Room not found");
+    if (screen.total_seats < 1) {
+      throw new AppError(409, "ROOM_HAS_NO_SEATS", "Room must have seats before scheduling a show");
+    }
+
+    const showRepo = manager.getRepository("Show");
+    const created = [];
+    const skipped = [];
+    const dates = datesBetween(input.dateFrom, input.dateTo, input.weekdays);
+
+    for (const date of dates) {
+      for (const time of input.startTimes) {
+        const start_time = showDateTime(date, time);
+        const end_time = new Date(start_time.getTime() + movie.duration * 60 * 1000);
+        const showInput = {
+          movie: { id: movie.id },
+          screen: { id: screen.id },
+          start_time,
+          end_time,
+          price: input.price,
+        };
+
+        try {
+          await validateSchedule(manager, showInput);
+          const show = showRepo.create({
+            start_time,
+            end_time,
+            price: input.price,
+            movie,
+            screen,
+            status: "scheduled",
+            cancellation_reason: null,
+            cancelled_at: null,
+          });
+          await showRepo.save(show);
+          created.push(show);
+        } catch (error) {
+          const item = {
+            date,
+            time,
+            code: error.code || "SHOW_BULK_ITEM_INVALID",
+            message: error.message || "Show cannot be created",
+          };
+          if (input.conflictMode === "skip" && error instanceof AppError) {
+            skipped.push(item);
+            continue;
+          }
+          error.details = item;
+          throw error;
+        }
+      }
+    }
+
+    return { created, skipped, requested: dates.length * input.startTimes.length };
+  });
+
+  await recordAuditLog(req, {
+    action: "show.bulk_create",
+    resourceType: "Show",
+    resourceId: null,
+    metadata: {
+      movieId: input.movie.id,
+      screenId: input.screen.id,
+      requested: result.requested,
+      created: result.created.length,
+      skipped: result.skipped.length,
+    },
+  });
+
+  res.status(201).json({
+    requested: result.requested,
+    created: result.created.length,
+    skipped: result.skipped.length,
+    conflicts: result.skipped,
+    shows: result.created.map(serializeShow),
+  });
 };
 
 exports.updateShow = async (req, res) => {

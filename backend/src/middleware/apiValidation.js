@@ -116,6 +116,43 @@ const show = z
     path: ["end_time"],
     message: "Must be after start_time",
   });
+const showBulk = z
+  .object({
+    movie: relation,
+    screen: relation,
+    dateFrom: z.iso.date(),
+    dateTo: z.iso.date(),
+    weekdays: z.array(z.coerce.number().int().min(0).max(6)).min(1).max(7),
+    startTimes: z
+      .array(z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Must be HH:mm"))
+      .min(1)
+      .max(20),
+    price: z.coerce.number().positive(),
+    conflictMode: z.enum(["skip", "fail"]).default("skip"),
+  })
+  .superRefine((value, context) => {
+    if (value.dateFrom > value.dateTo) {
+      context.addIssue({
+        code: "custom",
+        path: ["dateTo"],
+        message: "dateTo must be on or after dateFrom",
+      });
+    }
+    if (new Set(value.weekdays).size !== value.weekdays.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["weekdays"],
+        message: "Weekdays must not contain duplicates",
+      });
+    }
+    if (new Set(value.startTimes).size !== value.startTimes.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["startTimes"],
+        message: "Start times must not contain duplicates",
+      });
+    }
+  });
 const seatIds = z
   .array(uuid)
   .min(1)
@@ -281,6 +318,7 @@ module.exports = {
   }),
   showCreate: validateRequest({ body: show }),
   showUpdate: validateRequest({ body: show }),
+  showBulkCreate: validateRequest({ body: showBulk }),
   adminShowList: validateRequest({
     query: z.object({
       ...pagination,

@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
-import { Star, Clock, Calendar, Tag, User, Ticket, MapPin, Monitor } from "lucide-react";
+import { Star, Clock, Calendar, Tag, User, MapPin, Monitor } from "lucide-react";
 import { movieService } from "../services/movieService";
 import { bookingService } from "../services/bookingService";
 import Button from "../components/common/Button";
@@ -231,7 +231,6 @@ const MovieDetailPage = () => {
     [selectedCity, shows],
   );
   const groupedShowtimes = useMemo(() => groupShowsByTheater(visibleShows), [visibleShows]);
-  const firstVisibleShow = visibleShows[0];
   const existingReview = user?.id ? reviews.find((review) => review.user?.id === user.id) : null;
   const currentMovieId = String(id || "").toLowerCase();
   const hasUsedTicketForMovie = myBookings.some(
@@ -413,7 +412,7 @@ const MovieDetailPage = () => {
       <div className="container-custom py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           {/* Main Content */}
-          <div className="lg:col-span-2">
+          <div className="order-1 lg:col-span-2">
             <div className="mb-8">
               <h2 className="font-heading text-2xl font-bold mb-4">Nội dung phim</h2>
               <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
@@ -562,194 +561,197 @@ const MovieDetailPage = () => {
                 </section>
               </div>
             )}
-
-            {/* Reviews Section */}
-            <div id="reviews">
-              <h2 className="font-heading text-2xl font-bold mb-4">
-                Đánh giá
-                {reviewSummary.count > 0 && (
-                  <span className="ml-2 text-base font-normal text-gray-500">
-                    {formatRating(reviewSummary.rating)} sao · {reviewSummary.count} lượt
-                  </span>
-                )}
-              </h2>
-              {user ? (
-                <form
-                  onSubmit={handleReviewSubmit(submitReview)}
-                  className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 mb-6"
-                  noValidate
-                >
-                  <FormAlert message={reviewError} />
-                  {reviewNotice && (
-                    <p role="status" className="mb-3 rounded-lg bg-green-500/10 p-3 text-green-500">
-                      {reviewNotice}
-                    </p>
-                  )}
-                  {reviewNotAllowedByTicket ? (
-                    <p className="mb-3 rounded-lg bg-amber-500/10 p-3 text-sm text-amber-400">
-                      Bạn chỉ có thể đánh giá sau khi vé của phim này đã được check-in và chuyển
-                      sang trạng thái đã dùng.
-                    </p>
-                  ) : (
-                    <p className="mb-3 text-sm text-gray-500">
-                      Bạn cần có vé đã dùng cho phim này. Nếu đã từng đánh giá, gửi lại sẽ cập nhật
-                      đánh giá hiện có.
-                    </p>
-                  )}
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-sm font-medium">Đánh giá của bạn:</span>
-                    <div className="flex gap-1">
-                      {[1, 2, 3, 4, 5].map((r) => (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => setReviewValue("rating", r, { shouldValidate: true })}
-                          disabled={isReviewDisabled}
-                          aria-label={`${r} sao`}
-                          className="focus:outline-none"
-                        >
-                          <Star
-                            className={`w-5 h-5 ${
-                              r <= reviewRating
-                                ? "text-yellow-400 fill-yellow-400"
-                                : "text-gray-300"
-                            }`}
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {reviewErrors.rating && (
-                    <p role="alert" className="text-sm text-error">
-                      {reviewErrors.rating.message}
-                    </p>
-                  )}
-                  <textarea
-                    {...registerReview("comment")}
-                    placeholder="Chia sẻ cảm nhận của bạn về bộ phim..."
-                    className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 resize-none"
-                    rows="3"
-                    disabled={isReviewDisabled}
-                  />
-                  {reviewErrors.comment && (
-                    <p role="alert" className="text-sm text-error">
-                      {reviewErrors.comment.message}
-                    </p>
-                  )}
-                  <Button
-                    type="submit"
-                    className="mt-3"
-                    isLoading={reviewMutation.isPending || isReviewSubmitting}
-                    disabled={isReviewDisabled || isLoadingMyBookings}
-                  >
-                    {existingReview ? "Cập nhật đánh giá" : "Gửi đánh giá"}
-                  </Button>
-                  {existingReview && (
-                    <button
-                      type="button"
-                      disabled={deleteReviewMutation.isPending}
-                      onClick={() =>
-                        window.confirm("Xóa đánh giá của bạn?") && deleteReviewMutation.mutate()
-                      }
-                      className="ml-3 mt-3 text-sm text-red-500"
-                    >
-                      Xóa đánh giá
-                    </button>
-                  )}
-                </form>
-              ) : (
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-center mb-6">
-                  <p className="mb-2 text-sm text-gray-500">
-                    Chỉ tài khoản có vé đã check-in/đã dùng cho phim này mới có thể đánh giá.
-                  </p>
-                  <p className="text-gray-600 dark:text-gray-400">
-                    Đăng nhập để viết đánh giá{" "}
-                    <button
-                      onClick={() => navigate("/login")}
-                      className="text-primary-600 hover:underline"
-                    >
-                      Đăng nhập ngay
-                    </button>
-                  </p>
-                </div>
-              )}
-
-              {reviewsQuery.isPending ? (
-                <div role="status" className="py-6 text-center">
-                  Đang tải đánh giá...
-                </div>
-              ) : reviewsQuery.isError ? (
-                <div role="alert" className="rounded-lg bg-red-500/10 p-4 text-red-500">
-                  <p>Không thể tải danh sách đánh giá.</p>
-                  <button
-                    type="button"
-                    onClick={() => reviewsQuery.refetch()}
-                    className="mt-2 font-semibold underline"
-                  >
-                    Thử lại
-                  </button>
-                </div>
-              ) : reviews.length === 0 ? (
-                <p className="py-6 text-center text-gray-500">Chưa có đánh giá nào cho phim này.</p>
-              ) : (
-                <div className="space-y-4">
-                  {reviews.map((review) => (
-                    <div
-                      key={review.id}
-                      className="border-b border-gray-200 dark:border-gray-700 pb-4"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <User className="w-5 h-5 text-gray-400" />
-                          <span className="font-medium">{review.user?.name || "Người dùng"}</span>
-                        </div>
-                        <StarBar rating={review.rating} />
-                      </div>
-                      <p className="text-gray-700 dark:text-gray-300">{review.comment}</p>
-                      <p className="text-xs text-gray-400 mt-2">
-                        {review.created_at
-                          ? new Date(review.created_at).toLocaleDateString("vi-VN")
-                          : "—"}
-                      </p>
-                      {user?.role === "admin" && (
-                        <button
-                          type="button"
-                          disabled={moderateReviewMutation.isPending}
-                          onClick={() =>
-                            window.confirm("Gỡ đánh giá này theo quyền moderation?") &&
-                            moderateReviewMutation.mutate(review.id)
-                          }
-                          className="mt-2 text-xs text-red-500"
-                        >
-                          Gỡ bởi moderator
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
 
           {/* Sidebar */}
-          <div>
-            <div className="sticky top-24 bg-gray-50 dark:bg-gray-800 rounded-xl p-6">
-              <Button
-                className="w-full mb-3"
-                onClick={() => {
-                  if (movie.status === "now_showing" && firstVisibleShow) {
-                    navigate(`/booking/${firstVisibleShow.id}`);
-                  }
-                }}
-                disabled={movie.status !== "now_showing" || !firstVisibleShow}
-              >
-                <Ticket className="w-4 h-4" />
-                {movie.status === "now_showing" ? "Đặt vé ngay" : "Sắp chiếu"}
-              </Button>
-              <p className="text-sm text-gray-500">
-                Thông tin đạo diễn, diễn viên và ngôn ngữ chưa được backend cung cấp.
-              </p>
+          <div id="reviews" className="order-2 lg:col-start-3 lg:row-start-1">
+            <div className="rounded-xl bg-gray-50 p-6 dark:bg-gray-800">
+              <h2 className="font-heading mb-4 text-xl font-bold">Thông tin phim</h2>
+              <dl className="space-y-3 text-sm">
+                <div>
+                  <dt className="text-gray-500">Đạo diễn</dt>
+                  <dd className="font-semibold">{movie.director || "Chưa cập nhật"}</dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500">Diễn viên</dt>
+                  <dd className="font-semibold">{movie.cast || "Chưa cập nhật"}</dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500">Ngôn ngữ</dt>
+                  <dd className="font-semibold">{movie.language || "Chưa cập nhật"}</dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500">Quốc gia</dt>
+                  <dd className="font-semibold">{movie.country || "Chưa cập nhật"}</dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500">Phân loại độ tuổi</dt>
+                  <dd className="font-semibold">{movie.age_rating || "Chưa cập nhật"}</dd>
+                </div>
+              </dl>
             </div>
+
+            <h2 className="font-heading mb-4 mt-6 text-2xl font-bold">
+              Đánh giá
+              {reviewSummary.count > 0 && (
+                <span className="ml-2 text-base font-normal text-gray-500">
+                  {formatRating(reviewSummary.rating)} sao · {reviewSummary.count} lượt
+                </span>
+              )}
+            </h2>
+            {user ? (
+              <form
+                onSubmit={handleReviewSubmit(submitReview)}
+                className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 mb-6"
+                noValidate
+              >
+                <FormAlert message={reviewError} />
+                {reviewNotice && (
+                  <p role="status" className="mb-3 rounded-lg bg-green-500/10 p-3 text-green-500">
+                    {reviewNotice}
+                  </p>
+                )}
+                {reviewNotAllowedByTicket ? (
+                  <p className="mb-3 rounded-lg bg-amber-500/10 p-3 text-sm text-amber-400">
+                    Bạn chỉ có thể đánh giá sau khi vé của phim này đã được check-in và chuyển sang
+                    trạng thái đã dùng.
+                  </p>
+                ) : (
+                  <p className="mb-3 text-sm text-gray-500">
+                    Bạn cần có vé đã dùng cho phim này. Nếu đã từng đánh giá, gửi lại sẽ cập nhật
+                    đánh giá hiện có.
+                  </p>
+                )}
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-sm font-medium">Đánh giá của bạn:</span>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setReviewValue("rating", r, { shouldValidate: true })}
+                        disabled={isReviewDisabled}
+                        aria-label={`${r} sao`}
+                        className="focus:outline-none"
+                      >
+                        <Star
+                          className={`w-5 h-5 ${
+                            r <= reviewRating ? "text-yellow-400 fill-yellow-400" : "text-gray-300"
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {reviewErrors.rating && (
+                  <p role="alert" className="text-sm text-error">
+                    {reviewErrors.rating.message}
+                  </p>
+                )}
+                <textarea
+                  {...registerReview("comment")}
+                  placeholder="Chia sẻ cảm nhận của bạn về bộ phim..."
+                  className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 resize-none"
+                  rows="3"
+                  disabled={isReviewDisabled}
+                />
+                {reviewErrors.comment && (
+                  <p role="alert" className="text-sm text-error">
+                    {reviewErrors.comment.message}
+                  </p>
+                )}
+                <Button
+                  type="submit"
+                  className="mt-3"
+                  isLoading={reviewMutation.isPending || isReviewSubmitting}
+                  disabled={isReviewDisabled || isLoadingMyBookings}
+                >
+                  {existingReview ? "Cập nhật đánh giá" : "Gửi đánh giá"}
+                </Button>
+                {existingReview && (
+                  <button
+                    type="button"
+                    disabled={deleteReviewMutation.isPending}
+                    onClick={() =>
+                      window.confirm("Xóa đánh giá của bạn?") && deleteReviewMutation.mutate()
+                    }
+                    className="ml-3 mt-3 text-sm text-red-500"
+                  >
+                    Xóa đánh giá
+                  </button>
+                )}
+              </form>
+            ) : (
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-center mb-6">
+                <p className="mb-2 text-sm text-gray-500">
+                  Chỉ tài khoản có vé đã check-in/đã dùng cho phim này mới có thể đánh giá.
+                </p>
+                <p className="text-gray-600 dark:text-gray-400">
+                  Đăng nhập để viết đánh giá{" "}
+                  <button
+                    onClick={() => navigate("/login")}
+                    className="text-primary-600 hover:underline"
+                  >
+                    Đăng nhập ngay
+                  </button>
+                </p>
+              </div>
+            )}
+
+            {reviewsQuery.isPending ? (
+              <div role="status" className="py-6 text-center">
+                Đang tải đánh giá...
+              </div>
+            ) : reviewsQuery.isError ? (
+              <div role="alert" className="rounded-lg bg-red-500/10 p-4 text-red-500">
+                <p>Không thể tải danh sách đánh giá.</p>
+                <button
+                  type="button"
+                  onClick={() => reviewsQuery.refetch()}
+                  className="mt-2 font-semibold underline"
+                >
+                  Thử lại
+                </button>
+              </div>
+            ) : reviews.length === 0 ? (
+              <p className="py-6 text-center text-gray-500">Chưa có đánh giá nào cho phim này.</p>
+            ) : (
+              <div className="space-y-4">
+                {reviews.map((review) => (
+                  <div
+                    key={review.id}
+                    className="border-b border-gray-200 dark:border-gray-700 pb-4"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <User className="w-5 h-5 text-gray-400" />
+                        <span className="font-medium">{review.user?.name || "Người dùng"}</span>
+                      </div>
+                      <StarBar rating={review.rating} />
+                    </div>
+                    <p className="text-gray-700 dark:text-gray-300">{review.comment}</p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      {review.created_at
+                        ? new Date(review.created_at).toLocaleDateString("vi-VN")
+                        : "—"}
+                    </p>
+                    {user?.role === "admin" && (
+                      <button
+                        type="button"
+                        disabled={moderateReviewMutation.isPending}
+                        onClick={() =>
+                          window.confirm("Gỡ đánh giá này theo quyền moderation?") &&
+                          moderateReviewMutation.mutate(review.id)
+                        }
+                        className="mt-2 text-xs text-red-500"
+                      >
+                        Gỡ bởi moderator
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
