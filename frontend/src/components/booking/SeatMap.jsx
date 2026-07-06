@@ -105,7 +105,7 @@ const SeatMap = ({
   }, {});
 
   const seatColor = (seat) => {
-    if (selectedIds.has(String(seat.id).toLowerCase())) return "bg-primary";
+    if (selectedIds.has(String(seat.id).toLowerCase())) return "bg-green-600";
     if (seat.status === "occupied") return "bg-gray-600 cursor-not-allowed";
     if (seat.status === "locked") return "bg-yellow-600 cursor-not-allowed";
     if (seat.status === "disabled") return "bg-gray-800 cursor-not-allowed opacity-40";
@@ -169,7 +169,7 @@ const SeatMap = ({
 
         <div className="mt-12 flex flex-wrap justify-center gap-6 border-t border-white/10 pt-6 text-sm">
           <Legend color="bg-surface-container-high" label="Còn trống" />
-          <Legend color="bg-primary" label="Đã chọn" />
+          <Legend color="bg-green-600" label="Đã chọn" />
           <Legend color="bg-gray-600" label="Đã đặt" />
           <Legend color="bg-yellow-600" label="Đang được giữ" />
           <Legend color="bg-gray-800 opacity-40" label="Tạm khóa" />
