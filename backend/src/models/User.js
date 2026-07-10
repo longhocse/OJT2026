@@ -10,22 +10,35 @@ module.exports = new EntitySchema({
       generated: "uuid",
     },
     email: {
-      type: "varchar",
+      type: "nvarchar",
+      length: 255,
       unique: true,
     },
     password_hash: {
-      type: "varchar",
+      type: "nvarchar",
+      length: 255,
     },
     name: {
-      type: "varchar",
+      type: "nvarchar",
+      length: 100,
     },
     phone: {
-      type: "varchar",
+      type: "nvarchar",
+      length: 20,
       nullable: true,
     },
     role: {
-      type: "varchar",
-      default: "user",
+      type: "nvarchar",
+      length: 20,
+      default: "customer",
+    },
+    is_active: {
+      type: "bit",
+      default: true,
+    },
+    email_verified_at: {
+      type: "datetime2",
+      nullable: true,
     },
     created_at: {
       type: "datetime",
@@ -40,6 +53,21 @@ module.exports = new EntitySchema({
     },
     reviews: {
       target: "Review",
+      type: "one-to-many",
+      inverseSide: "user",
+    },
+    refreshTokens: {
+      target: "RefreshToken",
+      type: "one-to-many",
+      inverseSide: "user",
+    },
+    passwordResetTokens: {
+      target: "PasswordResetToken",
+      type: "one-to-many",
+      inverseSide: "user",
+    },
+    emailVerificationTokens: {
+      target: "EmailVerificationToken",
       type: "one-to-many",
       inverseSide: "user",
     },

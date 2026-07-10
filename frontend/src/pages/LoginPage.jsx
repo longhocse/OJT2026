@@ -1,228 +1,238 @@
 import React, { useState } from "react";
-import { useDispatch } from "react-redux";
-import { useNavigate, Link } from "react-router-dom";
-import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { motion } from "framer-motion";
-import { Eye, EyeOff, Mail, Lock, User, Phone } from "lucide-react";
-import { authService } from "../services/authService";
-import { setCredentials } from "../redux/slices/authSlice";
-
-const loginSchema = z.object({
-  email: z.string().email("Email không hợp lệ"),
-  password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
-});
-
-const registerSchema = z.object({
-  name: z.string().min(2, "Tên phải có ít nhất 2 ký tự"),
-  email: z.string().email("Email không hợp lệ"),
-  phone: z.string().regex(/^(0[3|5|7|8|9])[0-9]{8}$/, "Số điện thoại không hợp lệ"),
-  password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Mật khẩu xác nhận không khớp",
-  path: ["confirmPassword"],
-});
+import { useForm } from "react-hook-form";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Eye, EyeOff, Lock, Mail, Phone, User, ArrowRight } from "lucide-react";
+import FormAlert from "../components/common/FormAlert";
+import useAuth from "../hooks/useAuth";
+import { applyBackendErrors } from "../validation/formErrors";
+import { loginSchema, registerSchema } from "../validation/schemas";
+import MovieTapMascot from "../components/MovieTapMascot";
 
 const LoginPage = () => {
-  const [isLogin, setIsLogin] = useState(true);
+  const [mode, setMode] = useState("login");
+
+  return (
+    <main className="min-h-screen bg-[#FAFAFA] flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row border border-gray-100">
+
+        {/* LEFT SIDE - Hình ảnh trang trí */}
+        <div className="hidden md:flex md:w-1/2 bg-gradient-to-br from-[#FEE2E2] via-[#FEF3C7] to-[#FCE7F3] p-12 items-center justify-center relative">
+          <div className="absolute top-10 right-10 w-32 h-32 bg-[#FCA5A5] rounded-full blur-3xl opacity-40"></div>
+          <div className="absolute bottom-10 left-10 w-40 h-40 bg-[#FCD34D] rounded-full blur-3xl opacity-40"></div>
+
+          <div className="relative z-10 flex flex-col items-center text-center gap-6">
+            <MovieTapMascot className="w-56 h-56 drop-shadow-xl" />
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">Chào mừng bạn!</h1>
+              <p className="text-slate-600 mt-2">Đặt vé xem phim nhanh chóng và dễ dàng.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT SIDE - Form */}
+        <div className="w-full md:w-1/2 p-8 md:p-12 bg-white">
+          <div className="flex flex-col h-full justify-center max-w-md mx-auto">
+            <div className="mb-8 text-center md:text-left">
+              <h1 className="text-3xl font-extrabold text-[#2b2d42]">
+                {mode === "login" ? "Đăng nhập" : "Đăng ký tài khoản"}
+              </h1>
+              <p className="mt-2 text-gray-500">
+                {mode === "login"
+                  ? "Chào mừng bạn trở lại! Hãy nhập thông tin để tiếp tục."
+                  : "Tạo tài khoản để không bỏ lỡ những bộ phim hay nhất."}
+              </p>
+            </div>
+
+            <AuthForm key={mode} mode={mode} />
+
+            <div className="mt-6 flex flex-col gap-3 items-center text-sm">
+              {mode === "login" && (
+                <button
+                  type="button"
+                  onClick={() => (window.location.href = "/forgot-password")}
+                  className="text-[#DC2626] hover:text-[#B91C1C] hover:underline transition font-medium"
+                >
+                  Quên mật khẩu?
+                </button>
+              )}
+
+              <div className="border-t border-gray-200 w-full my-2"></div>
+
+              <button
+                type="button"
+                onClick={() => setMode((value) => (value === "login" ? "register" : "login"))}
+                className="flex items-center gap-2 text-[#2b2d42] hover:text-[#DC2626] transition font-semibold group"
+              >
+                {mode === "login" ? "Chưa có tài khoản? Đăng ký ngay" : "Đã có tài khoản? Đăng nhập"}
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+};
+
+// ----------------- COMPONENT FORM ----------------- //
+
+const AuthForm = ({ mode }) => {
+  const isLogin = mode === "login";
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
-  const dispatch = useDispatch();
+  const [formError, setFormError] = useState("");
+  const [notice, setNotice] = useState("");
+  const { login, register: registerUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const {
     register,
     handleSubmit,
+    setError,
+    setFocus,
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(isLogin ? loginSchema : registerSchema),
+    defaultValues: { email: "", password: "", name: "", phone: "", confirmPassword: "" },
+    shouldFocusError: true,
   });
 
-  const onSubmit = async (data) => {
-    setError("");
+  const submit = async (values) => {
+    setFormError("");
+    setNotice("");
     try {
-      let response;
-      if (isLogin) {
-        response = await authService.login({ email: data.email, password: data.password });
-      } else {
-        response = await authService.register({
-          name: data.name,
-          email: data.email,
-          phone: data.phone,
-          password: data.password,
-        });
+      const response = isLogin ? await login(values) : await registerUser(values);
+      if (!isLogin) {
+        setNotice(response.message || "Đăng ký thành công. Vui lòng kiểm tra email để xác thực.");
+        return;
       }
-      dispatch(setCredentials({ user: response.user, token: response.token }));
-      navigate("/");
-    } catch (err) {
-      setError(err.response?.data?.message || "Đã có lỗi xảy ra");
+      const requested = location.state?.from;
+      navigate(
+        typeof requested === "string" ? requested : response.user.role === "admin" ? "/admin" : "/",
+        { replace: true },
+      );
+    } catch (error) {
+      setFormError(
+        applyBackendErrors(error, {
+          setError,
+          setFocus,
+          allowedFields: isLogin ? ["email", "password"] : ["email", "password", "name", "phone"],
+        }),
+      );
     }
   };
 
   return (
-    <div className="min-h-[calc(100vh-64px)] flex items-center justify-center py-12 px-4">
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8"
-      >
-        <div className="text-center mb-8">
-          <h1 className="font-heading text-2xl font-bold">{isLogin ? "Đăng nhập" : "Đăng ký"}</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
-            {isLogin ? "Chào mừng bạn trở lại!" : "Tạo tài khoản để đặt vé dễ dàng hơn"}
-          </p>
+    <form onSubmit={handleSubmit(submit)} className="space-y-4" noValidate>
+      <FormAlert message={formError} />
+      {notice && (
+        <p role="status" className="rounded-xl bg-[#DCFCE7] p-3 text-sm text-[#166534] font-medium border border-[#BBF7D0]">
+          {notice}
+        </p>
+      )}
+
+      {!isLogin && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field
+            label="Họ tên *"
+            icon={User}
+            error={errors.name}
+            inputProps={register("name")}
+            autoComplete="name"
+          />
+          <Field
+            label="Số điện thoại *"
+            icon={Phone}
+            error={errors.phone}
+            inputProps={register("phone")}
+            autoComplete="tel"
+          />
         </div>
+      )}
 
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-lg text-sm">
-            {error}
-          </div>
-        )}
+      <Field
+        label="Email *"
+        icon={Mail}
+        error={errors.email}
+        inputProps={register("email")}
+        type="email"
+        autoComplete="username"
+      />
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {!isLogin && (
-            <>
-              <div>
-                <label className="block text-sm font-medium mb-1">Họ tên</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    {...register("name")}
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    placeholder="Nguyễn Văn A"
-                  />
-                </div>
-                {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Số điện thoại</label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    {...register("phone")}
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
-                    placeholder="0912345678"
-                  />
-                </div>
-                {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone.message}</p>}
-              </div>
-            </>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium mb-1">Email</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                {...register("email")}
-                type="email"
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
-                placeholder="you@example.com"
-              />
-            </div>
-            {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">Mật khẩu</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                {...register("password")}
-                type={showPassword ? "text" : "password"}
-                className="w-full pl-10 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
-                placeholder="••••••"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2"
-              >
-                {showPassword ? <EyeOff className="w-5 h-5 text-gray-400" /> : <Eye className="w-5 h-5 text-gray-400" />}
-              </button>
-            </div>
-            {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>}
-          </div>
-
-          {!isLogin && (
-            <div>
-              <label className="block text-sm font-medium mb-1">Xác nhận mật khẩu</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  {...register("confirmPassword")}
-                  type={showPassword ? "text" : "password"}
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
-                  placeholder="••••••"
-                />
-              </div>
-              {errors.confirmPassword && <p className="text-red-500 text-xs mt-1">{errors.confirmPassword.message}</p>}
-            </div>
-          )}
-
-<button
-type="submit"
-disabled={isSubmitting}
-className="
-w-full
-py-3
-rounded-lg
-bg-blue-600
-hover:bg-blue-700
-text-white
-font-semibold
-transition-all
-duration-200
-disabled:opacity-50
-disabled:cursor-not-allowed
-flex
-items-center
-justify-center
-"
-
->
-
-{isSubmitting ? (
-<> <svg
-     className="animate-spin h-5 w-5 mr-2"
-     viewBox="0 0 24 24"
-   > <circle
-       className="opacity-25"
-       cx="12"
-       cy="12"
-       r="10"
-       stroke="currentColor"
-       strokeWidth="4"
-       fill="none"
-     /> <path
-       className="opacity-75"
-       fill="currentColor"
-       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-     /> </svg>
-Đang xử lý...
-</>
-) : (
-isLogin ? "Đăng nhập" : "Đăng ký"
-)} </button>
-
-        </form>
-
-        <div className="mt-6 text-center">
+      <div className="relative">
+        <label className="block text-sm font-medium text-[#2b2d42] mb-1">
+          Mật khẩu *
+        </label>
+        <div className="relative">
+          <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[#2b2d42]" />
+          <input
+            {...register("password")}
+            type={showPassword ? "text" : "password"}
+            autoComplete={isLogin ? "current-password" : "new-password"}
+            aria-invalid={Boolean(errors.password)}
+            // Đã sửa: Bỏ nền xám, dùng nền trắng kem, chữ đen đậm, viền mỏng
+            className="w-full rounded-xl bg-[#FAFAFA] border border-gray-200 text-[#2b2d42] py-2.5 pl-10 pr-10 placeholder:text-gray-400 focus:bg-white focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 outline-none transition"
+          />
           <button
-            onClick={() => {
-              setIsLogin(!isLogin);
-              setError("");
-            }}
-            className="text-primary-600 hover:text-primary-700 text-sm"
+            type="button"
+            onClick={() => setShowPassword((value) => !value)}
+            aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#2b2d42] transition"
           >
-            {isLogin ? "Chưa có tài khoản? Đăng ký ngay" : "Đã có tài khoản? Đăng nhập"}
+            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
           </button>
         </div>
-      </motion.div>
-    </div>
+        <FieldError error={errors.password} />
+      </div>
+
+      {!isLogin && (
+        <Field
+          label="Xác nhận mật khẩu *"
+          icon={Lock}
+          error={errors.confirmPassword}
+          inputProps={register("confirmPassword")}
+          type={showPassword ? "text" : "password"}
+          autoComplete="new-password"
+        />
+      )}
+
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        className="w-full mt-6 rounded-xl bg-[#DC2626] py-3.5 font-bold text-white shadow-md shadow-[#DC2626]/30 hover:bg-[#B91C1C] transition disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {isSubmitting ? "Đang xử lý..." : isLogin ? "Đăng nhập" : "Đăng ký"}
+      </button>
+    </form>
   );
 };
+
+// ----------------- COMPONENT FIELD ----------------- //
+
+const Field = ({ label, icon: Icon, error, inputProps, type = "text", ...rest }) => (
+  <label className="block text-sm font-medium text-[#2b2d42]">
+    <span className="mb-1 block">{label}</span>
+    <span className="relative block">
+      <Icon className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[#2b2d42]" />
+      <input
+        {...inputProps}
+        {...rest}
+        type={type}
+        aria-invalid={Boolean(error)}
+        // Đã sửa: Bỏ dark:bg-gray-700, sửa thành nền sáng, chữ đen rõ
+        className="w-full rounded-xl bg-[#FAFAFA] border border-gray-200 text-[#2b2d42] py-2.5 pl-10 pr-3 placeholder:text-gray-400 focus:bg-white focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 outline-none transition"
+      />
+    </span>
+    <FieldError error={error} />
+  </label>
+);
+
+const FieldError = ({ error }) =>
+  error ? (
+    <span role="alert" className="mt-1 block text-sm text-[#DC2626] font-medium">
+      {error.message}
+    </span>
+  ) : null;
 
 export default LoginPage;

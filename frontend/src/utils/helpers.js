@@ -1,38 +1,38 @@
-import { format, formatDistanceToNow, isToday, isTomorrow } from 'date-fns';
+import { format, formatDistanceToNow, isToday, isTomorrow } from "date-fns";
 
 // Format currency VND
 export const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
     minimumFractionDigits: 0,
   }).format(amount);
 };
 
 // Format date time
 export const formatDateTime = (date) => {
-  return format(new Date(date), 'PPP p');
+  return format(new Date(date), "PPP p");
 };
 
 // Format showtime display
 export const formatShowtime = (date) => {
   const showDate = new Date(date);
   if (isToday(showDate)) {
-    return `Today, ${format(showDate, 'h:mm a')}`;
+    return `Today, ${format(showDate, "h:mm a")}`;
   }
   if (isTomorrow(showDate)) {
-    return `Tomorrow, ${format(showDate, 'h:mm a')}`;
+    return `Tomorrow, ${format(showDate, "h:mm a")}`;
   }
-  return format(showDate, 'MMM dd, h:mm a');
+  return format(showDate, "MMM dd, h:mm a");
 };
 
 // Time remaining until show
 export const getTimeRemaining = (startTime) => {
   const now = new Date();
   const start = new Date(startTime);
-  if (start <= now) return 'Started';
+  if (start <= now) return "Started";
   const hours = Math.floor((start - now) / (1000 * 60 * 60));
-  const minutes = Math.floor(((start - now) % (3600000)) / 60000);
+  const minutes = Math.floor(((start - now) % 3600000) / 60000);
   if (hours > 24) {
     return formatDistanceToNow(start, { addSuffix: true });
   }
@@ -45,8 +45,8 @@ export const getSeatLabel = (row, number) => `${row}${number}`;
 // Calculate seat price based on type
 export const calculateSeatPrice = (basePrice, seatType) => {
   let price = parseFloat(basePrice);
-  if (seatType === 'vip') price *= 1.5;
-  if (seatType === 'couple') price *= 1.8;
+  if (seatType === "vip") price *= 1.5;
+  if (seatType === "couple") price *= 1.8;
   return Math.round(price);
 };
 
@@ -74,7 +74,7 @@ export const debounce = (func, delay) => {
 // Truncate text
 export const truncateText = (text, maxLength) => {
   if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength) + '...';
+  return text.substring(0, maxLength) + "...";
 };
 
 // Get rating stars
@@ -88,8 +88,8 @@ export const getRatingStars = (rating) => {
 // Group movies by genre
 export const groupByGenre = (movies) => {
   return movies.reduce((acc, movie) => {
-    const genres = movie.genre.split(',');
-    genres.forEach(genre => {
+    const genres = movie.genre.split(",");
+    genres.forEach((genre) => {
       if (!acc[genre.trim()]) acc[genre.trim()] = [];
       acc[genre.trim()].push(movie);
     });

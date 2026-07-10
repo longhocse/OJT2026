@@ -1,44 +1,76 @@
-const express = require("express");
-const cors = require("cors");
-const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
-require("dotenv").config();
+const { env } = require("./config/env");
 const { AppDataSource } = require("./config/database");
-const routes = require("./routes");
-const { errorHandler } = require("./middleware/errorHandler");
+const { createApp } = require("./app");
+const logger = require("./utils/logger");
+const { startBookingExpiryWorker } = require("./services/bookingExpiryWorker");
 
-const app = express();
-const PORT = process.env.PORT || 5000;
+const createGracefulShutdown = ({
+  server,
+  dataSource = AppDataSource,
+  timeoutMs = 10000,
+  stopWorker = () => {},
+}) => {
+  let shutdownPromise;
 
-app.use(helmet());
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || "http://localhost:5173",
-  credentials: true
-}));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+  return (signal = "manual") => {
+    if (shutdownPromise) return shutdownPromise;
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: "Too many requests from this IP",
-});
-app.use("/api", limiter);
+    shutdownPromise = (async () => {
+      logger.info("shutdown_started", { signal });
+      stopWorker();
+      await new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          logger.error("http_shutdown_timeout", { timeoutMs });
+          server.closeAllConnections?.();
+          resolve();
+        }, timeoutMs);
+        timeout.unref?.();
 
-app.use("/api", routes);
+        server.close(() => {
+          clearTimeout(timeout);
+          resolve();
+        });
+        server.closeIdleConnections?.();
+      });
 
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
+      if (dataSource.isInitialized) {
+        await dataSource.destroy();
+        logger.info("database_disconnected");
+      }
+      logger.info("shutdown_completed", { signal });
+    })();
 
-app.use(errorHandler);
+    return shutdownPromise;
+  };
+};
 
-AppDataSource.initialize()
-  .then(() => {
-    console.log("Database connected");
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-  })
-  .catch((err) => {
-    console.error("Database connection failed:", err);
-    process.exit(1);
+const startServer = async () => {
+  await AppDataSource.initialize();
+  logger.info("database_connected");
+
+  const app = createApp({ dataSource: AppDataSource });
+  const server = app.listen(env.PORT, () => {
+    logger.info("server_started", { port: env.PORT, corsOrigins: env.CORS_ALLOWED_ORIGINS });
   });
+  const shutdown = createGracefulShutdown({ server, stopWorker: startBookingExpiryWorker() });
+  server.shutdown = shutdown;
+
+  for (const signal of ["SIGTERM", "SIGINT"]) {
+    process.once(signal, () => {
+      shutdown(signal).catch((error) => {
+        logger.error("shutdown_failed", { signal, error });
+        process.exitCode = 1;
+      });
+    });
+  }
+  return server;
+};
+
+if (require.main === module) {
+  startServer().catch((error) => {
+    logger.error("server_start_failed", { error });
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { createGracefulShutdown, startServer };

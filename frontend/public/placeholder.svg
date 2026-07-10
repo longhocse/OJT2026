@@ -1,0 +1,9 @@
+<svg width="300" height="450" viewBox="0 0 300 450" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="300" height="450" rx="18" fill="#1F2937"/>
+  <rect x="28" y="28" width="244" height="394" rx="14" fill="#111827" stroke="#374151" stroke-width="2"/>
+  <path d="M88 170H212C220.837 170 228 177.163 228 186V278C228 286.837 220.837 294 212 294H88C79.1634 294 72 286.837 72 278V186C72 177.163 79.1634 170 88 170Z" fill="#243244" stroke="#4B5563" stroke-width="2"/>
+  <circle cx="116" cy="208" r="18" fill="#FBBF24"/>
+  <path d="M85 270L126.5 232L158.5 261L178 242L219 278H88C86.3431 278 85 276.657 85 275V270Z" fill="#6B7280"/>
+  <text x="150" y="330" text-anchor="middle" fill="#E5E7EB" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">MOVIETAP</text>
+  <text x="150" y="358" text-anchor="middle" fill="#9CA3AF" font-family="Arial, Helvetica, sans-serif" font-size="14">Poster unavailable</text>
+</svg>

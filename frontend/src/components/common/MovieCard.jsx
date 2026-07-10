@@ -2,48 +2,75 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Star, Clock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import SafeImage from "./SafeImage";
+
+const formatRating = (rating) =>
+  Number(rating) > 0
+    ? new Intl.NumberFormat("vi-VN", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(Number(rating))
+    : "N/A";
 
 const MovieCard = ({ movie }) => {
   const navigate = useNavigate();
+  const reviewCount = Number(movie.reviewCount) || 0;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -8 }}
-      className="group cursor-pointer rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-lg hover:shadow-2xl transition-all duration-300"
+      whileHover={{ y: -6 }}
+      className="group cursor-pointer rounded-2xl overflow-hidden bg-white shadow-sm border border-[#E6DFD9] hover:shadow-xl hover:border-[#B8744C] transition-all duration-300"
       onClick={() => navigate(`/movie/${movie.id}`)}
     >
-      <div className="relative aspect-[2/3] overflow-hidden">
-        <img
-          src={movie.poster_url || "https://via.placeholder.com/300x450?text=No+Poster"}
+      {/* Poster phim */}
+      <div className="relative aspect-[2/3] overflow-hidden bg-[#F9F7F5]">
+        <SafeImage
+          src={movie.poster_url}
           alt={movie.title}
-          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
-        <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
-          <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-          <span className="text-xs font-semibold text-white">{movie.rating?.toFixed(1) || "N/A"}</span>
+
+        {/* Badge đánh giá - Phong cách hiện đại */}
+        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md rounded-full pl-2 pr-3 py-1 flex items-center gap-1.5 shadow-sm border border-[#E6DFD9]">
+          <Star className="w-3.5 h-3.5 text-[#DC2626] fill-[#DC2626]" />
+          <span className="text-xs font-bold text-[#3E3A39]">{formatRating(movie.rating)}</span>
+          {reviewCount > 0 && (
+            <span className="text-[10px] font-medium text-[#6B625A]">({reviewCount})</span>
+          )}
         </div>
+
+        {/* Badge Sắp chiếu - Phong cách Đỏ cam */}
         {movie.status === "coming_soon" && (
-          <div className="absolute bottom-2 left-2 bg-primary-600 text-white text-xs font-semibold px-2 py-1 rounded">
+          <div className="absolute bottom-3 left-3 bg-[#DC2626] text-white text-xs font-bold px-3 py-1 rounded-full shadow-md shadow-[#DC2626]/30">
             Sắp chiếu
           </div>
         )}
       </div>
-      <div className="p-4">
-        <h3 className="font-bold text-lg line-clamp-1">{movie.title}</h3>
-        <div className="flex items-center gap-2 mt-1 text-sm text-gray-600 dark:text-gray-400">
-          <Clock className="w-3 h-3" />
-          <span>{movie.duration} phút</span>
-          <span className="w-1 h-1 rounded-full bg-gray-400"></span>
-          <span>{movie.genre?.split(",")[0]}</span>
+
+      {/* Nội dung phim */}
+      <div className="p-4 md:p-5">
+        <h3 className="font-extrabold text-[#3E3A39] text-lg line-clamp-1 group-hover:text-[#B8744C] transition-colors">
+          {movie.title}
+        </h3>
+
+        <div className="flex items-center gap-2 mt-1.5 text-xs font-medium text-[#6B625A]">
+          <div className="flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5" />
+            <span>{movie.duration} phút</span>
+          </div>
+          <span className="w-1 h-1 rounded-full bg-[#E6DFD9]"></span>
+          <span>{movie.genre ? movie.genre.split(",")[0] : "Chưa phân loại"}</span>
         </div>
+
+        {/* Nút hành động */}
         <button
           onClick={(e) => {
             e.stopPropagation();
-            navigate(movie.status === "now_showing" ? `/movie/${movie.id}` : "#");
+            navigate(`/movie/${movie.id}`);
           }}
-          className="mt-3 w-full py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-semibold transition-colors"
+          className="mt-4 w-full py-2.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white rounded-xl text-sm font-bold shadow-md shadow-[#DC2626]/20 hover:shadow-lg transition-all"
         >
           {movie.status === "now_showing" ? "Đặt vé ngay" : "Xem chi tiết"}
         </button>

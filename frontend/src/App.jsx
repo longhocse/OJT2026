@@ -1,57 +1,33 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Provider } from 'react-redux';
-import { PersistGate } from 'redux-persist/integration/react';
-import { store, persistor } from './redux/store';
-import HomePage from './pages/HomePage';
-import MoviesPage from './pages/MoviesPage';
-import MovieDetailPage from './pages/MovieDetailPage';
-import BookingPage from './pages/BookingPage';
-import CheckoutPage from './pages/CheckoutPage';
-import SuccessPage from './pages/SuccessPage';
-import LoginPage from './pages/LoginPage';
-import MyBookingsPage from './pages/MyBookingsPage';
-import Navbar from './components/common/Navbar';
-import Footer from './components/common/Footer';
-import './index.css';
+import React, { Suspense, lazy } from "react";
+import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import AuthSessionManager from "./components/auth/AuthSessionManager";
+import AdminRoute from "./components/common/AdminRoute";
+import AppErrorBoundary from "./components/common/AppErrorBoundary";
+import PageLoader from "./components/common/PageLoader";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      retry: 1,
-    },
-  },
-});
+const AdminLayout = lazy(() => import("./layouts/AdminLayout"));
+const UserLayout = lazy(() => import("./layouts/UserLayout"));
 
 function App() {
   return (
-    <Provider store={store}>
-      <PersistGate loading={null} persistor={persistor}>
-        <QueryClientProvider client={queryClient}>
-          <BrowserRouter>
-            <div className="min-h-screen bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark flex flex-col">
-              <Navbar />
-              <main className="flex-grow">
-                <Routes>
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/movies" element={<MoviesPage />} />
-                  <Route path="/movie/:id" element={<MovieDetailPage />} />
-                  <Route path="/booking/:showId" element={<BookingPage />} />
-                  <Route path="/checkout" element={<CheckoutPage />} />
-                  <Route path="/success" element={<SuccessPage />} />
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/my-bookings" element={<MyBookingsPage />} />
-                  <Route path="*" element={<Navigate to="/" />} />
-                </Routes>
-              </main>
-              <Footer />
-            </div>
-          </BrowserRouter>
-        </QueryClientProvider>
-      </PersistGate>
-    </Provider>
+    <AppErrorBoundary>
+      <Router>
+        <AuthSessionManager />
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route
+              path="/admin/*"
+              element={
+                <AdminRoute>
+                  <AdminLayout />
+                </AdminRoute>
+              }
+            />
+            <Route path="/*" element={<UserLayout />} />
+          </Routes>
+        </Suspense>
+      </Router>
+    </AppErrorBoundary>
   );
 }
 

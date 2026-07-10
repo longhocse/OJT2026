@@ -3,6 +3,7 @@ import { createSlice } from "@reduxjs/toolkit";
 const initialState = {
   selectedSeats: [],
   showDetails: null,
+  checkoutSession: null,
   bookingInfo: null,
 };
 
@@ -16,16 +17,21 @@ const bookingSlice = createSlice({
     setShowDetails: (state, action) => {
       state.showDetails = action.payload;
     },
+    setCheckoutSession: (state, action) => {
+      state.checkoutSession = action.payload;
+    },
     setBookingInfo: (state, action) => {
       state.bookingInfo = action.payload;
     },
-    clearBooking: (state) => {
-      state.selectedSeats = [];
-      state.showDetails = null;
-      state.bookingInfo = null;
-    },
+    clearBooking: () => initialState,
   },
 });
 
-export const { setSelectedSeats, setShowDetails, setBookingInfo, clearBooking } = bookingSlice.actions;
+export const {
+  setSelectedSeats,
+  setShowDetails,
+  setCheckoutSession,
+  setBookingInfo,
+  clearBooking,
+} = bookingSlice.actions;
 export default bookingSlice.reducer;

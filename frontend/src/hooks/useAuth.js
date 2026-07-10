@@ -1,87 +1,64 @@
-import { useSelector, useDispatch } from "react-redux";
+import { useCallback } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { setCredentials, logout } from "../redux/slices/authSlice";
-import api from "../services/api";
+import { setCredentials } from "../redux/slices/authSlice";
+import { authService } from "../services/authService";
+import { clearClientSession } from "../services/authSession";
+
+const assertAuthResponse = (response) => {
+  if (!response?.user || !response?.token) {
+    throw new Error("Phản hồi đăng nhập từ máy chủ không hợp lệ.");
+  }
+  return response;
+};
 
 const useAuth = () => {
-    const { user, token, isAuthenticated } = useSelector((state) => state.auth);
-    const dispatch = useDispatch();
-    const navigate = useNavigate();
+  const auth = useSelector((state) => state.auth);
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
 
-    // Đăng nhập
-    const login = async (email, password) => {
-        try {
-            const response = await api.post("/auth/login", { email, password });
-            dispatch(setCredentials({
-                user: response.data.user,
-                token: response.data.token
-            }));
-            return { success: true, user: response.data.user };
-        } catch (error) {
-            return {
-                success: false,
-                message: error.response?.data?.message || "Đăng nhập thất bại"
-            };
-        }
-    };
+  const login = useCallback(
+    async (credentials) => {
+      const response = assertAuthResponse(await authService.login(credentials));
+      dispatch(setCredentials(response));
+      return response;
+    },
+    [dispatch],
+  );
 
-    // Đăng ký
-    const register = async (userData) => {
-        try {
-            const response = await api.post("/auth/register", userData);
-            dispatch(setCredentials({
-                user: response.data.user,
-                token: response.data.token
-            }));
-            return { success: true, user: response.data.user };
-        } catch (error) {
-            return {
-                success: false,
-                message: error.response?.data?.message || "Đăng ký thất bại"
-            };
-        }
-    };
+  const register = useCallback(async (userData) => {
+    return authService.register(userData);
+  }, []);
 
-    // Đăng xuất
-    const logoutUser = () => {
-        dispatch(logout());
-        navigate("/login");
-    };
+  const verifyEmail = useCallback(
+    async (token) => {
+      const response = assertAuthResponse(await authService.verifyEmail(token));
+      dispatch(setCredentials(response));
+      return response;
+    },
+    [dispatch],
+  );
 
-    // Cập nhật thông tin user (nếu cần)
-    const updateUser = async (userData) => {
-        try {
-            const response = await api.put("/auth/me", userData);
-            dispatch(setCredentials({
-                user: response.data.user,
-                token: token
-            }));
-            return { success: true, user: response.data.user };
-        } catch (error) {
-            return {
-                success: false,
-                message: error.response?.data?.message || "Cập nhật thất bại"
-            };
-        }
-    };
+  const logoutUser = useCallback(
+    async (destination = "/login") => {
+      try {
+        await authService.logout();
+      } catch (_error) {
+        // Local cleanup must still happen if the session is already unavailable.
+      }
+      void clearClientSession();
+      navigate(destination, { replace: true });
+    },
+    [navigate],
+  );
 
-    // Kiểm tra token còn hạn không
-    const isTokenValid = () => {
-        if (!token) return false;
-        // Có thể thêm logic kiểm tra token expiration ở đây
-        return true;
-    };
-
-    return {
-        user,
-        token,
-        isAuthenticated,
-        login,
-        register,
-        logout: logoutUser,
-        updateUser,
-        isTokenValid,
-    };
+  return {
+    ...auth,
+    login,
+    register,
+    verifyEmail,
+    logout: logoutUser,
+  };
 };
 
 export default useAuth;

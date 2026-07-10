@@ -9,10 +9,10 @@ module.exports = new EntitySchema({
       type: "uuid",
       generated: "uuid",
     },
-    row: { type: "char", length: 2 },
-    number: { type: "int" },
-    type: { type: "varchar", default: "standard" },
-    status: { type: "varchar", default: "available" },
+    row: { name: "seat_row", type: "char", length: 2 },
+    number: { name: "seat_number", type: "int" },
+    type: { type: "nvarchar", length: 20, default: "standard" },
+    status: { type: "nvarchar", length: 20, default: "available" },
     locked_until: { type: "datetime", nullable: true },
   },
   relations: {
@@ -20,6 +20,7 @@ module.exports = new EntitySchema({
       target: "Screen",
       type: "many-to-one",
       joinColumn: { name: "screen_id" },
+      nullable: true,
     },
     bookingSeats: {
       target: "BookingSeat",

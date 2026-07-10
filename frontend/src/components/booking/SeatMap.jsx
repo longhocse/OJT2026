@@ -1,157 +1,191 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import api from "../../services/api";
+import { MAX_BOOKING_SEATS } from "../../booking/bookingContract";
+import { bookingService } from "../../services/bookingService";
 
-const SeatMap = ({ showId, onSeatsSelected, maxSeats = 8 }) => {
+const SeatMap = ({
+  showId,
+  selectedSeats = [],
+  onSeatsSelected,
+  onAvailabilityChange,
+  refreshKey = 0,
+  maxSeats = MAX_BOOKING_SEATS,
+}) => {
   const [seats, setSeats] = useState([]);
-  const [selectedSeats, setSelectedSeats] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selectionError, setSelectionError] = useState("");
+
+  const fetchSeats = useCallback(async () => {
+    try {
+      setError("");
+      const data = await bookingService.getSeatsByShow(showId);
+      const nextSeats = Array.isArray(data) ? data : [];
+      setSeats(nextSeats);
+      onAvailabilityChange?.(nextSeats.filter((seat) => seat.status === "available").length);
+    } catch {
+      setError("Không thể tải sơ đồ ghế. Vui lòng thử lại.");
+      onAvailabilityChange?.(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [onAvailabilityChange, showId]);
 
   useEffect(() => {
     fetchSeats();
-    // Auto-refresh every 30 seconds
     const interval = setInterval(fetchSeats, 30000);
     return () => clearInterval(interval);
-  }, [showId]);
+  }, [fetchSeats, refreshKey]);
 
-  const fetchSeats = async () => {
-    try {
-      const res = await api.get(`/shows/${showId}/seats`);
-      setSeats(res.data);
-      setLoading(false);
-    } catch (error) {
-      console.error("Failed to fetch seats", error);
-      setLoading(false);
-    }
-  };
+  const selectedIds = useMemo(
+    () => new Set(selectedSeats.map((seat) => String(seat.id).toLowerCase())),
+    [selectedSeats],
+  );
 
   const handleSeatClick = (seat) => {
-    if (seat.status === "occupied" || seat.status === "locked") return;
-    const isSelected = selectedSeats.find((s) => s.id === seat.id);
+    const seatId = String(seat.id).toLowerCase();
+    const isSelected = selectedIds.has(seatId);
+    if (
+      !isSelected &&
+      (seat.status === "occupied" || seat.status === "locked" || seat.status === "disabled")
+    )
+      return;
+
     if (isSelected) {
-      const newSelected = selectedSeats.filter((s) => s.id !== seat.id);
-      setSelectedSeats(newSelected);
-      onSeatsSelected?.(newSelected);
-    } else {
-      if (selectedSeats.length >= maxSeats) {
-        alert(`You can only select up to ${maxSeats} seats`);
-        return;
-      }
-      const newSelected = [...selectedSeats, seat];
-      setSelectedSeats(newSelected);
-      onSeatsSelected?.(newSelected);
+      setSelectionError("");
+      onSeatsSelected(selectedSeats.filter((item) => String(item.id).toLowerCase() !== seatId));
+      return;
     }
+
+    if (selectedSeats.length >= maxSeats) {
+      setSelectionError(`Chỉ được chọn tối đa ${maxSeats} ghế.`);
+      return;
+    }
+
+    setSelectionError("");
+    onSeatsSelected([...selectedSeats, seat]);
   };
 
-  const getSeatColor = (seat) => {
-    if (selectedSeats.find((s) => s.id === seat.id)) return "bg-primary";
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12" role="status" aria-label="Đang tải sơ đồ ghế">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div role="alert" className="py-10 text-center">
+        <p className="text-error">{error}</p>
+        <button
+          type="button"
+          onClick={fetchSeats}
+          className="mt-4 rounded-lg bg-primary px-5 py-2 text-white"
+        >
+          Thử lại
+        </button>
+      </div>
+    );
+  }
+
+  if (seats.length === 0) {
+    return (
+      <div role="status" className="py-12 text-center text-on-surface-variant">
+        Suất chiếu này chưa có ghế khả dụng. Bạn không thể tiếp tục checkout.
+      </div>
+    );
+  }
+
+  const seatsByRow = seats.reduce((rows, seat) => {
+    const row = seat.row || "?";
+    if (!rows[row]) rows[row] = [];
+    rows[row].push(seat);
+    return rows;
+  }, {});
+
+  const seatColor = (seat) => {
+    if (selectedIds.has(String(seat.id).toLowerCase())) return "bg-green-600";
     if (seat.status === "occupied") return "bg-gray-600 cursor-not-allowed";
     if (seat.status === "locked") return "bg-yellow-600 cursor-not-allowed";
+    if (seat.status === "disabled") return "bg-gray-800 cursor-not-allowed opacity-40";
     if (seat.type === "vip") return "bg-secondary";
     if (seat.type === "couple") return "bg-purple-600";
     return "bg-surface-container-high";
   };
 
-  // Group seats by row
-  const seatsByRow = seats.reduce((acc, seat) => {
-    if (!acc[seat.row]) acc[seat.row] = [];
-    acc[seat.row].push(seat);
-    return acc;
-  }, {});
-
-  const rows = Object.keys(seatsByRow).sort();
-
-  if (loading) {
-    return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
   return (
     <div className="w-full overflow-x-auto">
+      {selectionError && (
+        <p role="alert" className="mb-4 text-center text-error">
+          {selectionError}
+        </p>
+      )}
       <div className="min-w-[600px]">
-        {/* Screen */}
         <div className="relative mb-12">
-          <div className="w-full h-3 bg-primary/30 rounded-t-full mx-auto max-w-md"></div>
-          <p className="text-center text-sm text-on-surface-variant mt-2 uppercase tracking-wider">
-            SCREEN
+          <div className="mx-auto h-3 w-full max-w-md rounded-t-full bg-primary/30" />
+          <p className="mt-2 text-center text-sm uppercase tracking-wider text-on-surface-variant">
+            Màn hình
           </p>
         </div>
 
-        {/* Seats Grid */}
         <div className="space-y-3">
-          {rows.map((row) => (
-            <div key={row} className="flex justify-center items-center gap-2">
-              <span className="w-8 text-sm font-bold text-on-surface-variant">
-                {row}
-              </span>
-              <div className="flex gap-2 flex-wrap justify-center">
-                {seatsByRow[row]
-                  .sort((a, b) => a.number - b.number)
-                  .map((seat) => (
-                    <motion.button
-                      key={seat.id}
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => handleSeatClick(seat)}
-                      disabled={seat.status === "occupied" || seat.status === "locked"}
-                      className={`
-                        w-10 h-10 rounded-t-lg flex items-center justify-center text-xs font-medium
-                        transition-all duration-200 shadow-md
-                        ${getSeatColor(seat)}
-                        ${seat.status === "occupied" || seat.status === "locked"
-                          ? "opacity-50"
-                          : "hover:shadow-lg cursor-pointer"
-                        }
-                      `}
-                    >
-                      {seat.type === "couple" ? (
-                        <span className="material-symbols-outlined text-sm">favorite</span>
-                      ) : (
-                        seat.number
-                      )}
-                    </motion.button>
-                  ))}
+          {Object.keys(seatsByRow)
+            .sort()
+            .map((row) => (
+              <div key={row} className="flex items-center justify-center gap-2">
+                <span className="w-8 text-sm font-bold text-on-surface-variant">{row}</span>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {seatsByRow[row]
+                    .sort((a, b) => Number(a.number) - Number(b.number))
+                    .map((seat) => {
+                      const selected = selectedIds.has(String(seat.id).toLowerCase());
+                      const unavailable =
+                        !selected &&
+                        (seat.status === "occupied" ||
+                          seat.status === "locked" ||
+                          seat.status === "disabled");
+                      return (
+                        <motion.button
+                          key={seat.id}
+                          type="button"
+                          whileHover={unavailable ? undefined : { scale: 1.1 }}
+                          whileTap={unavailable ? undefined : { scale: 0.95 }}
+                          onClick={() => handleSeatClick(seat)}
+                          disabled={unavailable}
+                          aria-pressed={selected}
+                          aria-label={`Ghế ${row}${seat.number}`}
+                          className={`flex h-10 w-10 items-center justify-center rounded-t-lg text-xs font-medium shadow-md transition-all duration-200 ${seatColor(seat)} ${unavailable ? "opacity-50" : "cursor-pointer hover:shadow-lg"}`}
+                        >
+                          {seat.number}
+                        </motion.button>
+                      );
+                    })}
+                </div>
+                <span className="w-8 text-sm font-bold text-on-surface-variant">{row}</span>
               </div>
-              <span className="w-8 text-sm font-bold text-on-surface-variant">
-                {row}
-              </span>
-            </div>
-          ))}
+            ))}
         </div>
 
-        {/* Legend */}
-        <div className="flex flex-wrap justify-center gap-6 mt-12 pt-6 border-t border-white/10">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-t bg-surface-container-high"></div>
-            <span className="text-sm">Available</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-t bg-primary"></div>
-            <span className="text-sm">Selected</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-t bg-gray-600"></div>
-            <span className="text-sm">Occupied</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-t bg-yellow-600"></div>
-            <span className="text-sm">Locked</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-t bg-secondary"></div>
-            <span className="text-sm">VIP</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-t bg-purple-600"></div>
-            <span className="text-sm">Couple</span>
-          </div>
+        <div className="mt-12 flex flex-wrap justify-center gap-6 border-t border-white/10 pt-6 text-sm">
+          <Legend color="bg-surface-container-high" label="Còn trống" />
+          <Legend color="bg-green-600" label="Đã chọn" />
+          <Legend color="bg-gray-600" label="Đã đặt" />
+          <Legend color="bg-yellow-600" label="Đang được giữ" />
+          <Legend color="bg-gray-800 opacity-40" label="Tạm khóa" />
+          <Legend color="bg-secondary" label="VIP" />
+          <Legend color="bg-purple-600" label="Ghế đôi" />
         </div>
       </div>
     </div>
   );
 };
+
+const Legend = ({ color, label }) => (
+  <div className="flex items-center gap-2">
+    <div className={`h-6 w-6 rounded-t ${color}`} />
+    <span>{label}</span>
+  </div>
+);
 
 export default SeatMap;

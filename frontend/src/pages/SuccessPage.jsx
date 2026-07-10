@@ -1,126 +1,179 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { bookingSuccessStore } from "../booking/bookingSession";
+import { paymentService } from "../services/paymentService";
+import { CheckCircle2, Ticket, Home } from "lucide-react";
+
+const isValidBookingResult = (booking) =>
+  Boolean(
+    booking &&
+    typeof booking.bookingId === "string" &&
+    Array.isArray(booking.seats) &&
+    Number.isFinite(Number(booking.totalPrice)),
+  );
 
 const SuccessPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { booking, show, seats, total } = location.state || {};
-  const [countdown, setCountdown] = useState({ hours: 2, minutes: 30, seconds: 0 });
+  const [booking] = useState(() => location.state?.booking || bookingSuccessStore.load());
+  const [paymentStatus, setPaymentStatus] = useState(booking?.payment?.status || "pending");
+  const [ticket, setTicket] = useState(null);
+  const [actionError, setActionError] = useState("");
+  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
-    if (!booking) {
-      navigate("/");
-    }
-    // Simulate countdown to showtime
-    if (show?.start_time) {
-      const showTime = new Date(show.start_time);
-      const updateCountdown = () => {
-        const now = new Date();
-        const diff = showTime - now;
-        if (diff <= 0) {
-          setCountdown({ hours: 0, minutes: 0, seconds: 0 });
-          return;
-        }
-        const hours = Math.floor(diff / (1000 * 60 * 60));
-        const minutes = Math.floor((diff % (3600000)) / 60000);
-        const seconds = Math.floor((diff % 60000) / 1000);
-        setCountdown({ hours, minutes, seconds });
-      };
-      updateCountdown();
-      const timer = setInterval(updateCountdown, 1000);
-      return () => clearInterval(timer);
-    }
-  }, [booking, show, navigate]);
+    if (!isValidBookingResult(booking)) navigate("/my-bookings", { replace: true });
+  }, [booking, navigate]);
 
-  if (!booking) return null;
+  if (!isValidBookingResult(booking)) return null;
+
+  const leaveSuccessPage = (destination) => {
+    bookingSuccessStore.clear();
+    navigate(destination);
+  };
+  const completeMock = async () => {
+    setProcessing(true);
+    setActionError("");
+    try {
+      const result = await paymentService.completeMock(booking.payment.id);
+      setPaymentStatus(result.payment.status);
+      if (result.bookingStatus === "confirmed") {
+        setTicket(await paymentService.getTicket(booking.bookingId));
+      }
+    } catch (error) {
+      setActionError(error.response?.data?.message || "Không thể hoàn tất thanh toán.");
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen pt-24 pb-16 px-4 flex items-center justify-center">
+    <main className="min-h-screen w-full bg-[#F5F0EB] flex justify-center items-center px-4 py-16 md:py-24">
       <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="max-w-2xl w-full bg-surface-container rounded-2xl p-8 text-center"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, type: "spring", stiffness: 100 }}
+        className="w-full max-w-2xl bg-white rounded-3xl p-8 md:p-10 shadow-2xl border border-[#E6DFD9] text-center relative overflow-hidden"
       >
-        <div className="w-20 h-20 bg-secondary/20 rounded-full flex items-center justify-center mx-auto mb-6">
-          <span className="material-symbols-outlined text-5xl text-secondary">check_circle</span>
-        </div>
-        <h1 className="text-3xl md:text-4xl font-bold mb-2">Booking Successful!</h1>
-        <p className="text-on-surface-variant mb-8">
-          Your tickets have been confirmed. Check your email for details.
-        </p>
+        {/* Background trang trí mờ nhẹ */}
+        <div className="absolute -top-20 -right-20 w-64 h-64 bg-[#B8744C]/5 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-[#DC2626]/5 rounded-full blur-3xl pointer-events-none"></div>
 
-        {/* Countdown */}
-        <div className="bg-surface-container-high rounded-xl p-6 mb-8">
-          <p className="text-sm uppercase tracking-wider text-on-surface-variant mb-2">
-            Movie starts in
-          </p>
-          <p className="text-3xl font-mono font-bold text-primary">
-            {String(countdown.hours).padStart(2, "0")}h {String(countdown.minutes).padStart(2, "0")}m{" "}
-            {String(countdown.seconds).padStart(2, "0")}s
-          </p>
-        </div>
-
-        {/* Ticket Details */}
-        <div className="border-t border-white/10 pt-6 mb-8 text-left">
-          <h3 className="font-semibold mb-4">Ticket Details</h3>
-          <div className="space-y-2 text-sm">
-            <p>
-              <span className="text-on-surface-variant">Movie:</span> {show?.movie?.title}
-            </p>
-            <p>
-              <span className="text-on-surface-variant">Showtime:</span>{" "}
-              {new Date(show?.start_time).toLocaleString()}
-            </p>
-            <p>
-              <span className="text-on-surface-variant">Theater:</span> {show?.screen?.theater?.name}
-            </p>
-            <p>
-              <span className="text-on-surface-variant">Seats:</span>{" "}
-              {seats?.map((s) => `${s.row}${s.number}`).join(", ")}
-            </p>
-            <p>
-              <span className="text-on-surface-variant">Total:</span>{" "}
-              <span className="font-bold text-primary">{total?.toLocaleString()} VND</span>
-            </p>
-            <p>
-              <span className="text-on-surface-variant">Booking ID:</span> {booking.bookingId}
-            </p>
+        <div className="relative z-10">
+          {/* Icon thành công */}
+          <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-[#B8744C]/10 border-4 border-[#B8744C]/20">
+            <CheckCircle2 className="w-12 h-12 text-[#B8744C]" />
           </div>
-        </div>
 
-        {/* QR Code Placeholder */}
-        <div className="flex justify-center mb-8">
-          <div className="w-32 h-32 bg-white p-2 rounded-lg">
-            <div className="w-full h-full bg-black flex items-center justify-center text-white text-xs">
-              QR Code
+          <h1 className="mb-2 text-3xl md:text-4xl font-extrabold text-[#3E3A39]">
+            Booking đã được tạo!
+          </h1>
+          <p className="mb-8 text-[#6B625A] text-base max-w-md mx-auto">
+            Vé chỉ được xác nhận chính thức sau khi thanh toán thành công.
+          </p>
+
+          {/* Thông tin chi tiết */}
+          <section className="mb-8 border-t border-[#E6DFD9] pt-6 text-left">
+            <div className="flex items-center gap-3 pb-4 border-b border-[#E6DFD9] mb-4">
+              <div className="p-2 bg-[#B8744C]/10 rounded-xl text-[#B8744C]">
+                <Ticket className="w-5 h-5" />
+              </div>
+              <h2 className="text-lg font-bold text-[#3E3A39]">Thông tin xác nhận từ backend</h2>
             </div>
-          </div>
-        </div>
 
-        {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <button
-            onClick={() => navigate("/my-bookings")}
-            className="px-6 py-3 bg-primary text-white rounded-lg font-semibold hover:bg-primary/90"
-          >
-            My Bookings
-          </button>
-          <button
-            onClick={() => navigate("/")}
-            className="px-6 py-3 border border-white/20 rounded-lg font-semibold hover:bg-white/5"
-          >
-            Back to Home
-          </button>
-          <button
-            onClick={() => alert("Share feature coming soon")}
-            className="px-6 py-3 border border-white/20 rounded-lg font-semibold hover:bg-white/5"
-          >
-            Share
-          </button>
+            <dl className="space-y-4 text-sm">
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 bg-[#F9F7F5] p-3 rounded-xl">
+                <dt className="text-[#6B625A] font-medium">Booking ID</dt>
+                <dd className="break-all font-mono font-semibold text-[#3E3A39]">{booking.bookingId}</dd>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 bg-[#F9F7F5] p-3 rounded-xl">
+                <dt className="text-[#6B625A] font-medium">Ghế đã chọn</dt>
+                <dd className="font-semibold text-[#3E3A39]">{booking.seats.join(", ") || "—"}</dd>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 bg-[#F9F7F5] p-3 rounded-xl border-l-4 border-[#B8744C]">
+                <dt className="text-[#6B625A] font-medium">Tổng tiền chính thức</dt>
+                <dd className="text-xl font-bold text-[#B8744C]">
+                  {Number(booking.totalPrice).toLocaleString("vi-VN")} ₫
+                </dd>
+              </div>
+            </dl>
+
+            {/* Trạng thái thanh toán */}
+            <div className="mt-6 bg-[#F9F7F5] rounded-xl p-4 border border-[#E6DFD9]">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <span className="text-[#6B625A] text-sm">Trạng thái thanh toán:</span>
+                <span className={`font-bold px-4 py-1.5 rounded-full text-sm ${paymentStatus === "confirmed" || paymentStatus === "completed"
+                    ? "bg-green-100 text-green-700 border border-green-200"
+                    : "bg-yellow-100 text-yellow-700 border border-yellow-200"
+                  }`}>
+                  {paymentStatus === "confirmed" || paymentStatus === "completed" ? "Đã thanh toán" : "Chờ thanh toán"}
+                </span>
+              </div>
+
+              {/* Nút thanh toán thử nghiệm (Mock) */}
+              {booking.payment?.provider === "mock" && paymentStatus === "pending" && (
+                <button
+                  type="button"
+                  disabled={processing}
+                  onClick={completeMock}
+                  className="mt-4 w-full rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] px-5 py-3 font-bold text-white shadow-md shadow-[#DC2626]/30 transition disabled:opacity-50"
+                >
+                  {processing ? "Đang xử lý..." : "Thanh toán thử nghiệm"}
+                </button>
+              )}
+
+              {/* Thông báo thanh toán tiền mặt */}
+              {booking.payment?.provider === "cash" && paymentStatus === "pending" && (
+                <div className="mt-4 bg-[#FDE047]/10 border border-[#FDE047]/30 rounded-xl p-3 text-center text-[#B45309] font-medium text-sm">
+                  💰 Đang chờ nhân viên rạp xác nhận thanh toán tiền mặt.
+                </div>
+              )}
+
+              {actionError && (
+                <p role="alert" className="mt-3 text-[#DC2626] font-medium text-center bg-red-50 p-2 rounded-lg text-sm">
+                  {actionError}
+                </p>
+              )}
+
+              {/* QR Ticket (nếu có) */}
+              {ticket && (
+                <div className="mt-5 rounded-xl bg-white border border-[#E6DFD9] p-4">
+                  <p className="text-sm font-bold text-[#3E3A39] mb-2">
+                    Mã vé: <span className="text-[#B8744C]">{ticket.ticketCode}</span>
+                  </p>
+                  <textarea
+                    readOnly
+                    aria-label="QR vé"
+                    value={ticket.qrPayload}
+                    rows="4"
+                    className="w-full bg-[#F9F7F5] rounded-xl border border-[#E6DFD9] p-3 font-mono text-xs resize-none text-[#3E3A39]"
+                  />
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Buttons Hành động */}
+          <div className="flex flex-col sm:flex-row justify-center gap-4 mt-2">
+            <button
+              type="button"
+              onClick={() => leaveSuccessPage("/my-bookings")}
+              className="flex items-center justify-center gap-2 rounded-2xl bg-[#DC2626] hover:bg-[#B91C1C] px-6 py-3.5 font-bold text-white shadow-md shadow-[#DC2626]/30 transition"
+            >
+              <Ticket className="w-4 h-4" /> Xem lịch sử booking
+            </button>
+            <button
+              type="button"
+              onClick={() => leaveSuccessPage("/")}
+              className="flex items-center justify-center gap-2 rounded-2xl border border-[#E6DFD9] bg-white hover:bg-[#F9F7F5] px-6 py-3.5 font-semibold text-[#3E3A39] transition"
+            >
+              <Home className="w-4 h-4" /> Về trang chủ
+            </button>
+          </div>
         </div>
       </motion.div>
-    </div>
+    </main>
   );
 };
 
