@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { Film, LayoutDashboard, LogOut, Menu, Ticket, User, X } from "lucide-react";
 import { clearClientSession } from "../../services/authSession";
 import { authService } from "../../services/authService";
-import { Film, Ticket, User, Settings, LogOut, LayoutDashboard, Menu, X } from "lucide-react";
+import { ADMIN_ROLE, isOperationRole, roleHomePath } from "../../utils/roles";
 
 const Navbar = () => {
   const { isAuthenticated, user } = useSelector((state) => state.auth);
@@ -12,9 +13,7 @@ const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 50);
-    };
+    const handleScroll = () => setScrolled(window.scrollY > 50);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
@@ -30,106 +29,70 @@ const Navbar = () => {
     setMobileMenuOpen(false);
   };
 
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === ADMIN_ROLE;
+  const canOperate = isOperationRole(user?.role);
+  const operationHome = roleHomePath(user?.role);
 
   return (
     <nav
-      className={`fixed top-0 w-full z-50 transition-all duration-300 ${
+      className={`fixed top-0 z-50 w-full transition-all duration-300 ${
         scrolled
-          ? "bg-surface/95 backdrop-blur-xl border-b border-white/10 shadow-2xl shadow-black/40"
-          : "bg-surface/80 backdrop-blur-xl border-b border-white/10"
+          ? "border-b border-white/10 bg-surface/95 shadow-2xl shadow-black/40 backdrop-blur-xl"
+          : "border-b border-white/10 bg-surface/80 backdrop-blur-xl"
       }`}
     >
-      <div className="flex justify-between items-center px-4 md:px-8 py-4 max-w-[1440px] mx-auto">
-        {/* Logo */}
+      <div className="mx-auto flex max-w-[1440px] items-center justify-between px-4 py-4 md:px-8">
         <Link
           to="/"
-          className="font-display-lg text-2xl md:text-3xl font-bold text-primary-container tracking-tighter hover:scale-105 transition-transform duration-200"
+          className="font-display-lg text-2xl font-bold tracking-tighter text-primary-container transition-transform duration-200 hover:scale-105 md:text-3xl"
         >
-          CINEMA NOIR
+          MovieTap
         </Link>
 
-        {/* Desktop Menu */}
-        <div className="hidden md:flex gap-8 items-center">
-          <Link
-            to="/"
-            className="text-on-surface-variant hover:text-on-surface transition-colors font-button text-sm uppercase tracking-widest hover:scale-105 duration-200"
-          >
-            Home
-          </Link>
-          <Link
-            to="/movies"
-            className="text-on-surface-variant hover:text-on-surface transition-colors font-button text-sm uppercase tracking-widest hover:scale-105 duration-200"
-          >
-            Movies
-          </Link>
-
-          {isAuthenticated && (
-            <Link
-              to="/my-bookings"
-              className="text-on-surface-variant hover:text-on-surface transition-colors font-button text-sm uppercase tracking-widest hover:scale-105 duration-200"
-            >
-              My Bookings
-            </Link>
-          )}
-
-          {/* Admin Menu - Chỉ hiển thị cho Admin */}
-          {isAdmin && (
+        <div className="hidden items-center gap-8 md:flex">
+          <NavLink to="/">Home</NavLink>
+          <NavLink to="/movies">Movies</NavLink>
+          {isAuthenticated && <NavLink to="/my-bookings">My Bookings</NavLink>}
+          {canOperate && (
             <div className="relative group">
               <button
                 type="button"
                 aria-haspopup="menu"
-                className="text-primary hover:text-primary-fixed transition-colors font-button text-sm uppercase tracking-widest hover:scale-105 duration-200 bg-primary/10 px-4 py-2 rounded-lg border border-primary/20 flex items-center gap-2"
+                className="font-button flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-4 py-2 text-sm uppercase tracking-widest text-primary transition-colors duration-200 hover:scale-105 hover:text-primary-fixed"
               >
-                <LayoutDashboard className="w-4 h-4" />
-                Admin
+                <LayoutDashboard className="h-4 w-4" />
+                {isAdmin ? "Admin" : "Vận hành"}
               </button>
               <div
                 className="invisible absolute right-0 mt-2 w-56 rounded-lg border border-white/10 bg-surface-container-high opacity-0 shadow-lg transition-all duration-200 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
                 role="menu"
               >
-                <Link
-                  to="/admin"
-                  className="w-full text-left px-4 py-2 hover:bg-white/10 rounded-lg text-sm flex items-center gap-2"
-                >
-                  <LayoutDashboard className="w-4 h-4" /> Dashboard
-                </Link>
-                <Link
-                  to="/admin/movies"
-                  className="w-full text-left px-4 py-2 hover:bg-white/10 rounded-lg text-sm flex items-center gap-2"
-                >
-                  <Film className="w-4 h-4" /> Quản lý phim
-                </Link>
-                <Link
-                  to="/admin/cinemas"
-                  className="w-full text-left px-4 py-2 hover:bg-white/10 rounded-lg text-sm flex items-center gap-2"
-                >
-                  <Settings className="w-4 h-4" /> Quản lý rạp
-                </Link>
-                <Link
-                  to="/admin/rooms"
-                  className="w-full text-left px-4 py-2 hover:bg-white/10 rounded-lg text-sm flex items-center gap-2"
-                >
-                  <Settings className="w-4 h-4" /> Quản lý phòng
-                </Link>
-                <Link
-                  to="/admin/users"
-                  className="w-full text-left px-4 py-2 hover:bg-white/10 rounded-lg text-sm flex items-center gap-2"
-                >
-                  <User className="w-4 h-4" /> Quản lý người dùng
-                </Link>
+                <DropLink to={operationHome} icon={LayoutDashboard}>
+                  Khu vận hành
+                </DropLink>
+                {isAdmin && (
+                  <>
+                    <DropLink to="/admin/movies" icon={Film}>
+                      Quản lý phim
+                    </DropLink>
+                    <DropLink to="/admin/users" icon={User}>
+                      Quản lý người dùng
+                    </DropLink>
+                  </>
+                )}
               </div>
             </div>
           )}
         </div>
 
-        {/* Right Section */}
         <div className="flex items-center gap-4">
           {isAuthenticated ? (
             <div className="flex items-center gap-3">
-              <span className="text-sm text-white hidden md:block">
+              <span className="hidden text-sm text-white md:block">
                 {user?.name}
-                {isAdmin && <span className="ml-2 text-xs text-primary">(Admin)</span>}
+                {canOperate && (
+                  <span className="ml-2 text-xs text-primary">({user?.role})</span>
+                )}
               </span>
 
               <div className="relative group">
@@ -143,34 +106,26 @@ const Navbar = () => {
                 </button>
 
                 <div
-                  className="invisible absolute right-0 mt-2 w-48 rounded-lg border border-white/10 bg-surface-container-high opacity-0 shadow-lg transition-all duration-200 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
+                  className="invisible absolute right-0 mt-2 w-52 rounded-lg border border-white/10 bg-surface-container-high opacity-0 shadow-lg transition-all duration-200 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
                   role="menu"
                 >
-                  {isAdmin && (
-                    <Link
-                      to="/admin"
-                      className="w-full text-left px-4 py-2 hover:bg-white/10 rounded-lg text-sm flex items-center gap-2"
-                    >
-                      <LayoutDashboard className="w-4 h-4" /> Admin Dashboard
-                    </Link>
+                  {canOperate && (
+                    <DropLink to={operationHome} icon={LayoutDashboard}>
+                      Khu vận hành
+                    </DropLink>
                   )}
-                  <Link
-                    to="/profile"
-                    className="w-full text-left px-4 py-2 hover:bg-white/10 rounded-lg text-sm flex items-center gap-2"
-                  >
-                    <User className="w-4 h-4" /> Hồ sơ
-                  </Link>
-                  <Link
-                    to="/my-bookings"
-                    className="w-full text-left px-4 py-2 hover:bg-white/10 rounded-lg text-sm flex items-center gap-2"
-                  >
-                    <Ticket className="w-4 h-4" /> My Bookings
-                  </Link>
+                  <DropLink to="/profile" icon={User}>
+                    Hồ sơ
+                  </DropLink>
+                  <DropLink to="/my-bookings" icon={Ticket}>
+                    My Bookings
+                  </DropLink>
                   <button
+                    type="button"
                     onClick={handleLogout}
-                    className="w-full text-left px-4 py-2 hover:bg-white/10 rounded-lg text-sm flex items-center gap-2 text-red-400"
+                    className="flex w-full items-center gap-2 rounded-lg px-4 py-2 text-left text-sm text-red-400 hover:bg-white/10"
                   >
-                    <LogOut className="w-4 h-4" /> Logout
+                    <LogOut className="h-4 w-4" /> Logout
                   </button>
                 </div>
               </div>
@@ -178,99 +133,64 @@ const Navbar = () => {
           ) : (
             <Link
               to="/login"
-              className="px-4 py-2 bg-primary-container text-on-primary-container rounded-lg hover:bg-primary-container/80 transition-colors"
+              className="rounded-lg bg-primary-container px-4 py-2 text-on-primary-container transition-colors hover:bg-primary-container/80"
             >
               Login
             </Link>
           )}
 
-          {/* Mobile Menu Button */}
           <button
             type="button"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-navigation"
             aria-label={mobileMenuOpen ? "Đóng menu" : "Mở menu"}
-            className="md:hidden text-on-surface-variant"
+            className="text-on-surface-variant md:hidden"
           >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
         </div>
       </div>
 
-      {/* Mobile Menu */}
       {mobileMenuOpen && (
         <div
           id="mobile-navigation"
-          className="md:hidden bg-surface/95 backdrop-blur-xl border-t border-white/10 p-4"
+          className="border-t border-white/10 bg-surface/95 p-4 backdrop-blur-xl md:hidden"
         >
           <div className="flex flex-col gap-3">
-            <Link
-              to="/"
-              className="text-on-surface-variant hover:text-on-surface px-3 py-2 rounded-lg"
-              onClick={() => setMobileMenuOpen(false)}
-            >
+            <MobileLink to="/" onClick={() => setMobileMenuOpen(false)}>
               Home
-            </Link>
-            <Link
-              to="/movies"
-              className="text-on-surface-variant hover:text-on-surface px-3 py-2 rounded-lg"
-              onClick={() => setMobileMenuOpen(false)}
-            >
+            </MobileLink>
+            <MobileLink to="/movies" onClick={() => setMobileMenuOpen(false)}>
               Movies
-            </Link>
+            </MobileLink>
             {isAuthenticated && (
-              <Link
-                to="/profile"
-                className="text-on-surface-variant hover:text-on-surface px-3 py-2 rounded-lg"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Hồ sơ
-              </Link>
-            )}
-            {isAuthenticated && (
-              <Link
-                to="/my-bookings"
-                className="text-on-surface-variant hover:text-on-surface px-3 py-2 rounded-lg"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                My Bookings
-              </Link>
-            )}
-            {isAdmin && (
               <>
-                <div className="border-t border-white/10 pt-2 mt-2">
-                  <p className="text-primary text-xs uppercase tracking-wider px-3 py-1">
-                    Admin Panel
+                <MobileLink to="/profile" onClick={() => setMobileMenuOpen(false)}>
+                  Hồ sơ
+                </MobileLink>
+                <MobileLink to="/my-bookings" onClick={() => setMobileMenuOpen(false)}>
+                  My Bookings
+                </MobileLink>
+              </>
+            )}
+            {canOperate && (
+              <>
+                <div className="mt-2 border-t border-white/10 pt-2">
+                  <p className="px-3 py-1 text-xs uppercase tracking-wider text-primary">
+                    Khu vận hành
                   </p>
                 </div>
-                <Link
-                  to="/admin"
-                  className="text-primary hover:text-primary-fixed px-3 py-2 rounded-lg"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  to="/admin/movies"
-                  className="text-primary hover:text-primary-fixed px-3 py-2 rounded-lg"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Quản lý phim
-                </Link>
-                <Link
-                  to="/admin/cinemas"
-                  className="text-primary hover:text-primary-fixed px-3 py-2 rounded-lg"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Quản lý rạp
-                </Link>
+                <MobileLink to={operationHome} onClick={() => setMobileMenuOpen(false)}>
+                  Dashboard vận hành
+                </MobileLink>
               </>
             )}
             {isAuthenticated && (
               <button
+                type="button"
                 onClick={handleLogout}
-                className="text-red-400 hover:text-red-300 px-3 py-2 rounded-lg text-left"
+                className="rounded-lg px-3 py-2 text-left text-red-400 hover:text-red-300"
               >
                 Logout
               </button>
@@ -281,5 +201,33 @@ const Navbar = () => {
     </nav>
   );
 };
+
+const NavLink = ({ to, children }) => (
+  <Link
+    to={to}
+    className="font-button text-sm uppercase tracking-widest text-on-surface-variant transition-colors duration-200 hover:scale-105 hover:text-on-surface"
+  >
+    {children}
+  </Link>
+);
+
+const DropLink = ({ to, icon: Icon, children }) => (
+  <Link
+    to={to}
+    className="flex w-full items-center gap-2 rounded-lg px-4 py-2 text-left text-sm hover:bg-white/10"
+  >
+    <Icon className="h-4 w-4" /> {children}
+  </Link>
+);
+
+const MobileLink = ({ to, children, onClick }) => (
+  <Link
+    to={to}
+    className="rounded-lg px-3 py-2 text-on-surface-variant hover:text-on-surface"
+    onClick={onClick}
+  >
+    {children}
+  </Link>
+);
 
 export default Navbar;

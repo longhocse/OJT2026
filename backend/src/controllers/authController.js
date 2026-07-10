@@ -20,6 +20,7 @@ const {
 } = require("../services/authTokenService");
 
 const getUserRepository = () => AppDataSource.getRepository("User");
+const userRelations = { theaterAssignments: { theater: true } };
 
 exports.register = async (req, res) => {
   const { email, password, name, phone } = res.locals.validated.body;
@@ -74,7 +75,7 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res) => {
   const { email, password } = res.locals.validated.body;
-  const user = await getUserRepository().findOne({ where: { email } });
+  const user = await getUserRepository().findOne({ where: { email }, relations: userRelations });
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
     throw new AppError(401, "INVALID_CREDENTIALS", "Invalid credentials");
   }
@@ -170,7 +171,10 @@ exports.logout = async (req, res) => {
 };
 
 exports.getMe = async (req, res) => {
-  const user = await getUserRepository().findOne({ where: { id: req.user.id } });
+  const user = await getUserRepository().findOne({
+    where: { id: req.user.id },
+    relations: userRelations,
+  });
   if (!user) throw new AppError(404, "USER_NOT_FOUND", "User not found");
   res.json(publicUser(user));
 };

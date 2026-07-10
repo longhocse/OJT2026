@@ -40,6 +40,23 @@ export const normalizeUser = (value) => {
     is_active: raw.is_active !== false,
     email_verified_at: nullableDate(raw.email_verified_at),
     created_at: nullableDate(raw.created_at),
+    homePath: text(raw.homePath),
+    theaterAssignments: Array.isArray(raw.theaterAssignments)
+      ? raw.theaterAssignments.map((assignment) => ({
+          id: text(assignment.id),
+          role_at_theater: text(assignment.role_at_theater),
+          is_active: assignment.is_active !== false,
+          theater: assignment.theater
+            ? {
+                id: id(assignment.theater.id, "User.theaterAssignments.theater"),
+                name: text(assignment.theater.name),
+                address: nullableText(assignment.theater.address),
+                city: nullableText(assignment.theater.city),
+                phone: nullableText(assignment.theater.phone),
+              }
+            : null,
+        }))
+      : [],
   };
 };
 
@@ -311,6 +328,7 @@ export const normalizeBookingResult = (value) => {
       ? {
           id: id(raw.payment.id, "BookingResult.payment"),
           provider: text(raw.payment.provider),
+          provider_transaction_id: nullableText(raw.payment.provider_transaction_id),
           status: text(raw.payment.status, "pending"),
           checkoutUrl: nullableText(raw.payment.checkoutUrl),
         }

@@ -247,14 +247,18 @@ exports.createBooking = async (req, res, next) => {
     const provider = getProviderForMethod(paymentMethod);
     const payment = paymentRepo.create({
       booking,
-      provider: paymentMethod === "cash" ? "cash" : "mock",
+      provider: paymentMethod === "cash" ? "cash" : provider === null ? "mock" : paymentMethod,
       amount: totalPrice,
       status: "pending",
       idempotency_key: randomUUID(),
       refunded_amount: 0,
     });
     await paymentRepo.save(payment);
-    const intent = await provider.createIntent({ paymentId: payment.id, amount: totalPrice });
+    const intent = await provider.createIntent({
+      paymentId: payment.id,
+      amount: totalPrice,
+      booking,
+    });
     payment.provider = intent.provider;
     payment.provider_transaction_id = intent.transactionId;
     await paymentRepo.save(payment);
@@ -272,6 +276,7 @@ exports.createBooking = async (req, res, next) => {
       payment: {
         id: payment.id,
         provider: payment.provider,
+        provider_transaction_id: payment.provider_transaction_id,
         status: payment.status,
         checkoutUrl: intent.checkoutUrl,
       },

@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Lock, Mail, Phone, User } from "lucide-react";
 import FormAlert from "../components/common/FormAlert";
 import useAuth from "../hooks/useAuth";
+import { roleHomePath } from "../utils/roles";
 import { applyBackendErrors } from "../validation/formErrors";
 import { loginSchema, registerSchema } from "../validation/schemas";
 
@@ -71,10 +72,9 @@ const AuthForm = ({ mode }) => {
         return;
       }
       const requested = location.state?.from;
-      navigate(
-        typeof requested === "string" ? requested : response.user.role === "admin" ? "/admin" : "/",
-        { replace: true },
-      );
+      navigate(typeof requested === "string" ? requested : roleHomePath(response.user.role), {
+        replace: true,
+      });
     } catch (error) {
       setFormError(
         applyBackendErrors(error, {

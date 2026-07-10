@@ -295,7 +295,7 @@ const BookingCard = ({
   );
 };
 
-const TicketModal = ({ ticket, onClose }) => {
+const LegacyTicketModal = ({ ticket, onClose }) => {
   const [qrUrl, setQrUrl] = useState("");
   const checkedInText = ticket.checkedInAt ? formatShowTime(ticket.checkedInAt) : "Chưa check-in";
 
@@ -383,6 +383,111 @@ const TicketModal = ({ ticket, onClose }) => {
         >
           Copy payload
         </button>
+      </div>
+    </div>
+  );
+};
+
+LegacyTicketModal.displayName = "LegacyTicketModal";
+
+const TicketModal = ({ ticket, onClose }) => {
+  const [qrUrl, setQrUrl] = useState("");
+  const booking = ticket.booking || {};
+  const show = booking.show || {};
+  const movie = show.movie || {};
+  const screen = show.screen || {};
+  const theater = screen.theater || {};
+  const seats = booking.seats?.map((seat) => seat.label).filter(Boolean).join(", ") || "—";
+  const showTime = show.start_time ? formatShowTime(show.start_time) : "Chưa có thông tin";
+
+  useEffect(() => {
+    let active = true;
+    QRCode.toDataURL(ticket.qrPayload, {
+      errorCorrectionLevel: "M",
+      margin: 2,
+      scale: 8,
+      width: 260,
+    })
+      .then((dataUrl) => {
+        if (active) setQrUrl(dataUrl);
+      })
+      .catch(() => {
+        if (active) setQrUrl("");
+      });
+    return () => {
+      active = false;
+    };
+  }, [ticket.qrPayload]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Vé điện tử"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+    >
+      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white text-gray-950 shadow-2xl">
+        <div className="flex items-start justify-between gap-4 rounded-t-2xl bg-neutral-950 px-5 py-4 text-white">
+          <div>
+            <h2 className="text-xl font-black">MovieTap</h2>
+            <p className="mt-1 text-sm text-gray-300">Vé điện tử · Đã thanh toán</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-white/10 px-3 py-1 text-sm hover:bg-white/20"
+          >
+            Đóng
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
+          <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-extrabold text-green-700">
+            ĐÃ XÁC NHẬN
+          </span>
+          <span className="font-mono text-sm font-extrabold text-gray-700">{ticket.ticketCode}</span>
+        </div>
+
+        <div className="p-5">
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <h3 className="text-lg font-extrabold">{movie.title || "Chưa có thông tin phim"}</h3>
+            <p className="mt-2 text-2xl font-black">{showTime}</p>
+            <p className="mt-1 font-semibold text-gray-700">
+              {theater.name || "Chưa có rạp"} · {screen.name || "Chưa có phòng"}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="rounded-full border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700">
+                Ghế {seats}
+              </span>
+              <span className="rounded-full border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700">
+                {booking.seats?.length || 1} vé
+              </span>
+            </div>
+          </div>
+
+          <div className="my-5 border-y border-gray-200 py-5">
+            <div className="mx-auto flex h-64 w-64 items-center justify-center rounded-xl border border-gray-200 bg-white p-3">
+              {qrUrl ? (
+                <img src={qrUrl} alt={`QR vé ${ticket.ticketCode}`} className="h-full w-full" />
+              ) : (
+                <div className="text-center text-sm text-gray-600">
+                  Không thể tạo ảnh QR. Vui lòng thử mở lại vé.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between text-sm text-gray-500">
+            <span>Tổng thanh toán</span>
+            <span className="text-lg font-black text-gray-950">
+              {formatMoney(booking.payment?.amount ?? booking.total_price)}
+            </span>
+          </div>
+
+          <p className="mt-5 text-xs text-gray-500">
+            ⓘ Đưa mã QR cho nhân viên khi vào rạp. Vé hợp lệ cho đúng suất chiếu, rạp và ghế trên vé.
+          </p>
+        </div>
       </div>
     </div>
   );

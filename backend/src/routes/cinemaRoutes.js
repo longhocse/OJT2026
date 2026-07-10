@@ -11,6 +11,7 @@ const {
   restoreCinema,
 } = require("../controllers/cinemaController");
 const { authMiddleware, adminMiddleware } = require("../middleware/authMiddleware");
+const { attachAccessScope, requireAnyRole } = require("../services/accessControlService");
 const validation = require("../middleware/apiValidation");
 
 const router = express.Router();
@@ -18,7 +19,8 @@ const router = express.Router();
 router.get(
   "/admin/list",
   authMiddleware,
-  adminMiddleware,
+  requireAnyRole(["admin", "manager", "cashier", "ticket_checker"]),
+  attachAccessScope,
   validation.adminCinemaList,
   getAdminCinemas,
 );

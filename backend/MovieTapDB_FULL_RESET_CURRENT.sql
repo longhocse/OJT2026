@@ -25,11 +25,12 @@ DECLARE @ExistingAppTables INT = (
       AND name IN (
           N'users', N'movies', N'genres', N'theaters', N'screens', N'shows',
           N'seats', N'bookings', N'booking_seats', N'reviews', N'show_seat_states', N'payments',
-          N'refresh_tokens', N'password_reset_tokens', N'email_verification_tokens', N'movie_genres', N'audit_logs'
+          N'refresh_tokens', N'password_reset_tokens', N'email_verification_tokens', N'movie_genres',
+          N'audit_logs', N'user_theaters'
       )
 );
 
-IF @ExistingAppTables = 17
+IF @ExistingAppTables = 18
 BEGIN
     PRINT 'MovieTap schema already exists; bootstrap skipped.';
     RETURN;
@@ -163,6 +164,23 @@ BEGIN TRY
         phone NVARCHAR(20) NULL,
         is_active BIT NOT NULL
             CONSTRAINT DF_theaters_is_active DEFAULT 1
+    );
+
+    CREATE TABLE dbo.user_theaters (
+        id UNIQUEIDENTIFIER NOT NULL
+            CONSTRAINT PK_user_theaters PRIMARY KEY
+            CONSTRAINT DF_user_theaters_id DEFAULT NEWID(),
+        user_id UNIQUEIDENTIFIER NOT NULL,
+        theater_id UNIQUEIDENTIFIER NOT NULL,
+        role_at_theater NVARCHAR(30) NOT NULL,
+        is_active BIT NOT NULL
+            CONSTRAINT DF_user_theaters_is_active DEFAULT 1,
+        created_at DATETIME2 NOT NULL
+            CONSTRAINT DF_user_theaters_created_at DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT CK_user_theaters_role CHECK (role_at_theater IN (N'manager', N'cashier', N'ticket_checker')),
+        CONSTRAINT UQ_user_theaters_user_theater UNIQUE (user_id, theater_id),
+        CONSTRAINT FK_user_theaters_user FOREIGN KEY (user_id) REFERENCES dbo.users(id) ON DELETE CASCADE,
+        CONSTRAINT FK_user_theaters_theater FOREIGN KEY (theater_id) REFERENCES dbo.theaters(id) ON DELETE CASCADE
     );
 
     CREATE TABLE dbo.screens (
@@ -419,6 +437,9 @@ BEGIN TRY
 
     DECLARE @AdminId UNIQUEIDENTIFIER = '10000000-0000-4000-8000-000000000001';
     DECLARE @CustomerId UNIQUEIDENTIFIER = '10000000-0000-4000-8000-000000000002';
+    DECLARE @ManagerId UNIQUEIDENTIFIER = '10000000-0000-4000-8000-000000000003';
+    DECLARE @CashierId UNIQUEIDENTIFIER = '10000000-0000-4000-8000-000000000004';
+    DECLARE @TicketCheckerId UNIQUEIDENTIFIER = '10000000-0000-4000-8000-000000000005';
     DECLARE @GenreId UNIQUEIDENTIFIER = '20000000-0000-4000-8000-000000000001';
     DECLARE @TheaterId UNIQUEIDENTIFIER = '30000000-0000-4000-8000-000000000001';
     DECLARE @ScreenId UNIQUEIDENTIFIER = '40000000-0000-4000-8000-000000000001';
@@ -429,13 +450,22 @@ BEGIN TRY
     INSERT INTO dbo.users (id, email, password_hash, name, role, is_active, email_verified_at)
     VALUES
         (@AdminId, N'admin@movietap.local', @PasswordHash, N'Demo Admin', N'admin', 1, SYSUTCDATETIME()),
-        (@CustomerId, N'customer@movietap.local', @PasswordHash, N'Demo Customer', N'customer', 1, SYSUTCDATETIME());
+        (@CustomerId, N'customer@movietap.local', @PasswordHash, N'Demo Customer', N'customer', 1, SYSUTCDATETIME()),
+        (@ManagerId, N'manager@movietap.local', @PasswordHash, N'Demo Branch Manager', N'manager', 1, SYSUTCDATETIME()),
+        (@CashierId, N'cashier@movietap.local', @PasswordHash, N'Demo Cashier', N'cashier', 1, SYSUTCDATETIME()),
+        (@TicketCheckerId, N'checker@movietap.local', @PasswordHash, N'Demo Ticket Checker', N'ticket_checker', 1, SYSUTCDATETIME());
 
     INSERT INTO dbo.genres (id, name, description)
     VALUES (@GenreId, N'Action', N'Development seed genre');
 
     INSERT INTO dbo.theaters (id, name, address, city, is_active)
     VALUES (@TheaterId, N'MovieTap Demo Cinema', N'1 Demo Street', N'Ho Chi Minh City', 1);
+
+    INSERT INTO dbo.user_theaters (user_id, theater_id, role_at_theater, is_active)
+    VALUES
+        (@ManagerId, @TheaterId, N'manager', 1),
+        (@CashierId, @TheaterId, N'cashier', 1),
+        (@TicketCheckerId, @TheaterId, N'ticket_checker', 1);
 
     INSERT INTO dbo.screens (id, theater_id, name, total_seats, layout_json, is_active)
     VALUES (

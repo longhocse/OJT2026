@@ -71,5 +71,10 @@ module.exports = new EntitySchema({
       type: "one-to-many",
       inverseSide: "user",
     },
+    theaterAssignments: {
+      target: "UserTheater",
+      type: "one-to-many",
+      inverseSide: "user",
+    },
   },
 });

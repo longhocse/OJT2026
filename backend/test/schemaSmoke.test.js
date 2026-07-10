@@ -22,6 +22,7 @@ const expectedEntities = [
   "PasswordResetToken",
   "EmailVerificationToken",
   "AuditLog",
+  "UserTheater",
 ];
 
 test("all EntitySchemas and important SQL Server queries build", async (t) => {

@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const { AppDataSource } = require("../config/database");
 const { env } = require("../config/env");
 const { AppError } = require("../utils/AppError");
+const { roleHomePath, toPublicAssignment } = require("./accessControlService");
 
 const REFRESH_COOKIE = "movietap_refresh";
 const hashToken = (token) => createHash("sha256").update(token).digest("hex");
@@ -23,6 +24,10 @@ const publicUser = (user) => ({
   is_active: user.is_active !== false,
   email_verified_at: user.email_verified_at ?? null,
   created_at: user.created_at,
+  homePath: roleHomePath(user.role),
+  theaterAssignments: Array.isArray(user.theaterAssignments)
+    ? user.theaterAssignments.map(toPublicAssignment)
+    : [],
 });
 
 const signAccessToken = (user) =>
@@ -30,13 +35,21 @@ const signAccessToken = (user) =>
     expiresIn: env.JWT_EXPIRES_IN,
   });
 
-const cookieOptions = () => ({
-  httpOnly: true,
-  secure: env.NODE_ENV === "production",
-  sameSite: "strict",
-  path: "/api/auth",
-  maxAge: durationMs(env.JWT_REFRESH_EXPIRES_IN),
-});
+const usesHttpsFrontend = () =>
+  [env.FRONTEND_URL, ...(env.CORS_ALLOWED_ORIGINS || [])].some((origin) =>
+    String(origin || "").startsWith("https://"),
+  );
+
+const cookieOptions = () => {
+  const crossSiteHttps = usesHttpsFrontend();
+  return {
+    httpOnly: true,
+    secure: env.NODE_ENV === "production" || crossSiteHttps,
+    sameSite: crossSiteHttps ? "none" : "lax",
+    path: "/api/auth",
+    maxAge: durationMs(env.JWT_REFRESH_EXPIRES_IN),
+  };
+};
 
 const setRefreshCookie = (res, token) => res.cookie(REFRESH_COOKIE, token, cookieOptions());
 const clearRefreshCookie = (res) =>
@@ -89,7 +102,7 @@ const rotateRefreshToken = async (rawToken) => {
     const repository = runner.manager.getRepository("RefreshToken");
     const current = await repository.findOne({
       where: { token_hash: hashToken(rawToken) },
-      relations: { user: true },
+      relations: { user: { theaterAssignments: { theater: true } } },
       lock: { mode: "pessimistic_write" },
     });
     if (!current) throw new AppError(401, "REFRESH_TOKEN_INVALID", "Invalid refresh token");

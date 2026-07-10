@@ -1,10 +1,14 @@
 import { useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate } from "react-router-dom";
-import { sessionVerified, startSessionVerification } from "../../redux/slices/authSlice";
+import {
+  sessionVerificationFailed,
+  sessionVerified,
+  setCredentials,
+  startSessionVerification,
+} from "../../redux/slices/authSlice";
 import { authService } from "../../services/authService";
 import { setUnauthorizedHandler } from "../../services/api";
-import { clearClientSession } from "../../services/authSession";
 
 const currentDestination = (location) => `${location.pathname}${location.search}${location.hash}`;
 
@@ -58,8 +62,19 @@ export default function AuthSessionManager() {
       .then((user) => {
         if (tokenRef.current === tokenBeingVerified) dispatch(sessionVerified(user));
       })
-      .catch(() => {
-        if (tokenRef.current === tokenBeingVerified) void clearClientSession();
+      .catch((error) => {
+        if (tokenRef.current !== tokenBeingVerified) return;
+        const status = error.response?.status;
+        if (status === 401 || status === 403) {
+          authService
+            .refresh()
+            .then((session) => {
+              if (tokenRef.current === tokenBeingVerified) dispatch(setCredentials(session));
+            })
+            .catch(() => dispatch(sessionVerificationFailed()));
+          return;
+        }
+        dispatch(sessionVerificationFailed());
       });
   }, [dispatch, token]);
 

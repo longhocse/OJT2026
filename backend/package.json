@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "security:check": "node scripts/check-secrets.js"
+    "security:check": "node scripts/check-secrets.js",
+    "payos:webhook": "node scripts/confirm-payos-webhook.js"
   },
   "keywords": [],
   "author": "",
@@ -33,6 +34,7 @@
     "mssql": "^12.5.5",
     "mysql2": "^3.22.5",
     "nodemailer": "^9.0.1",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "typeorm": "^1.0.0",
     "zod": "^4.4.3"

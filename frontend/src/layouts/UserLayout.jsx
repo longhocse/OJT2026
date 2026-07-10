@@ -19,6 +19,7 @@ const ProfilePage = lazy(() => import("../pages/ProfilePage"));
 const ForgotPasswordPage = lazy(() => import("../pages/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("../pages/ResetPasswordPage"));
 const VerifyEmailPage = lazy(() => import("../pages/VerifyEmailPage"));
+const PayOSReturnPage = lazy(() => import("../pages/PayOSReturnPage"));
 
 const protectedPage = (Page) => (
   <ProtectedRoute>
@@ -48,6 +49,8 @@ export default function UserLayout() {
             <Route path="movie/:id" element={<MovieDetailPage />} />
             <Route path="booking/:showId" element={protectedPage(BookingPage)} />
             <Route path="checkout" element={protectedPage(CheckoutPage)} />
+            <Route path="payment/payos/return" element={protectedPage(PayOSReturnPage)} />
+            <Route path="payment/payos/cancel" element={protectedPage(PayOSReturnPage)} />
             <Route path="success" element={protectedPage(SuccessPage)} />
             <Route path="my-bookings" element={protectedPage(MyBookingsPage)} />
             <Route path="profile" element={protectedPage(ProfilePage)} />

@@ -1,6 +1,7 @@
 const { AppDataSource } = require("../config/database");
 const { recordAuditLog } = require("../services/auditLogService");
 const { AppError } = require("../utils/AppError");
+const { applyTheaterScope } = require("../services/accessControlService");
 
 exports.getCinemas = async (req, res) => {
   const cinemas = await AppDataSource.getRepository("Theater").find({
@@ -25,6 +26,7 @@ exports.getAdminCinemas = async (req, res) => {
     if (qb.expressionMap.wheres.length > 0) qb.andWhere(condition, { search: `%${search}%` });
     else qb.where(condition, { search: `%${search}%` });
   }
+  applyTheaterScope(qb, req, "cinema");
 
   const [data, total] = await qb
     .orderBy("cinema.is_active", "DESC")

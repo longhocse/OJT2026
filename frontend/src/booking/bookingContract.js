@@ -1,5 +1,5 @@
 export const MAX_BOOKING_SEATS = 20;
-export const PAYMENT_METHODS = ["credit_card", "vnpay", "momo", "cash"];
+export const PAYMENT_METHODS = ["payos"];
 
 export const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

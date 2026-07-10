@@ -2,6 +2,7 @@ const { AppDataSource } = require("../config/database");
 const { In, MoreThan } = require("typeorm");
 const { recordAuditLog } = require("../services/auditLogService");
 const { AppError } = require("../utils/AppError");
+const { applyTheaterScope, assertScreenAccess, assertTheaterAccess } = require("../services/accessControlService");
 
 const seatPosition = (seat) => `${String(seat.row).toUpperCase()}:${Number(seat.number)}`;
 
@@ -29,7 +30,7 @@ const loadRoom = (id) =>
     relations: { theater: true, seats: true },
   });
 
-const saveRoomWithSeats = async ({ roomId, input }) => {
+const saveRoomWithSeats = async ({ req, roomId, input }) => {
   const queryRunner = AppDataSource.createQueryRunner();
   let transactionStarted = false;
 
@@ -45,6 +46,7 @@ const saveRoomWithSeats = async ({ roomId, input }) => {
 
     const theater = await theaterRepo.findOneBy({ id: input.theater.id, is_active: true });
     if (!theater) throw new AppError(404, "CINEMA_NOT_FOUND", "Cinema not found");
+    assertTheaterAccess(req, theater.id);
 
     let room;
     let existingSeats = [];
@@ -55,6 +57,7 @@ const saveRoomWithSeats = async ({ roomId, input }) => {
         lock: { mode: "pessimistic_write" },
       });
       if (!room) throw new AppError(404, "ROOM_NOT_FOUND", "Room not found");
+      assertTheaterAccess(req, room.theater?.id);
       existingSeats = room.seats || [];
     } else {
       room = roomRepo.create();
@@ -151,6 +154,7 @@ exports.getRooms = async (req, res) => {
     .where("screen.is_active = :active", { active: true })
     .andWhere("theater.is_active = :active", { active: true });
   if (cinemaId) qb.andWhere("theater.id = :cinemaId", { cinemaId });
+  if (req.user) applyTheaterScope(qb, req, "theater");
   res.json(await qb.orderBy("screen.name", "ASC").getMany());
 };
 
@@ -161,7 +165,7 @@ exports.getRoomById = async (req, res) => {
 };
 
 exports.createRoom = async (req, res) => {
-  const roomId = await saveRoomWithSeats({ input: res.locals.validated.body });
+  const roomId = await saveRoomWithSeats({ req, input: res.locals.validated.body });
   await recordAuditLog(req, {
     action: "room.create",
     resourceType: "Screen",
@@ -173,6 +177,7 @@ exports.createRoom = async (req, res) => {
 
 exports.updateRoom = async (req, res) => {
   const roomId = await saveRoomWithSeats({
+    req,
     roomId: req.params.id,
     input: res.locals.validated.body,
   });
@@ -195,6 +200,7 @@ exports.deleteRoom = async (req, res) => {
     relations: { seats: true },
   });
   if (!room) throw new AppError(404, "ROOM_NOT_FOUND", "Room not found");
+  await assertScreenAccess(AppDataSource.manager, req, room.id);
 
   if (showCount > 0) {
     room.is_active = false;

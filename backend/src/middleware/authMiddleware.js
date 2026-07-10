@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const { AppError } = require("../utils/AppError");
+const { ADMIN_ROLE, requireAnyRole } = require("../services/accessControlService");
 
 exports.authMiddleware = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -17,8 +18,10 @@ exports.authMiddleware = (req, res, next) => {
 };
 
 exports.adminMiddleware = (req, res, next) => {
-  if (req.user?.role !== "admin") {
+  if (req.user?.role !== ADMIN_ROLE) {
     return next(new AppError(403, "ADMIN_REQUIRED", "Admin access required"));
   }
   next();
 };
+
+exports.roleMiddleware = requireAnyRole;

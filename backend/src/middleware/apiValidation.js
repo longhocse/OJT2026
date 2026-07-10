@@ -367,7 +367,7 @@ module.exports = {
     query: z.object({
       ...pagination,
       search: z.string().trim().max(100).optional(),
-      provider: z.enum(["mock", "cash", "legacy"]).optional(),
+      provider: z.enum(["mock", "cash", "payos", "legacy"]).optional(),
       status: z
         .enum(["pending", "paid", "failed", "cancelled", "partially_refunded", "refunded"])
         .optional(),
@@ -381,7 +381,7 @@ module.exports = {
     body: z.object({
       showId: uuid,
       seatIds,
-      paymentMethod: z.enum(["credit_card", "vnpay", "momo", "cash"]),
+      paymentMethod: z.enum(["payos", "credit_card", "vnpay", "momo", "cash"]),
       lockToken: uuid,
     }),
   }),
@@ -405,8 +405,9 @@ module.exports = {
   adminUserUpdate: validateRequest({
     body: z
       .object({
-        role: z.enum(["customer", "admin"]).optional(),
+        role: z.enum(["customer", "admin", "manager", "cashier", "ticket_checker"]).optional(),
         is_active: z.boolean().optional(),
+        theaterIds: z.array(uuid).max(20).optional(),
       })
       .refine((value) => Object.keys(value).length > 0, {
         message: "At least one access field is required",

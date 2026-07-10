@@ -23,10 +23,7 @@ import { applyBackendErrors } from "../validation/formErrors";
 import SafeImage from "../components/common/SafeImage";
 
 const PAYMENT_LABELS = {
-  credit_card: "Thẻ tín dụng",
-  vnpay: "VNPay",
-  momo: "MoMo",
-  cash: "Thanh toán tại rạp",
+  payos: "PayOS / VietQR",
 };
 
 const getCreateBookingError = (error) => {
@@ -66,7 +63,7 @@ const CheckoutPage = () => {
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(checkoutSchema),
-    defaultValues: { paymentMethod: "credit_card" },
+    defaultValues: { paymentMethod: "payos" },
     shouldFocusError: true,
   });
   const paymentMethod = watch("paymentMethod");
@@ -175,6 +172,10 @@ const CheckoutPage = () => {
       dispatch(clearBooking());
       bookingCompletedRef.current = true;
       await queryClient.invalidateQueries({ queryKey: bookingKeys.mine });
+      if (booking.payment?.checkoutUrl) {
+        window.location.assign(booking.payment.checkoutUrl);
+        return;
+      }
       navigate("/success", { replace: true, state: { booking } });
     } catch (error) {
       const formError = applyBackendErrors(error, {
@@ -292,6 +293,10 @@ const CheckoutPage = () => {
         <section className="order-1 lg:order-2 lg:col-span-2">
           <div className="rounded-xl bg-surface-container p-6">
             <h2 className="mb-6 text-xl font-bold">Phương thức thanh toán</h2>
+            <p className="mb-4 text-sm text-on-surface-variant">
+              MovieTap hiện thanh toán trực tuyến bằng PayOS. Sau khi xác nhận, bạn sẽ được chuyển
+              sang cổng PayOS/VietQR để hoàn tất thanh toán.
+            </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {PAYMENT_METHODS.map((method) => (
                 <label

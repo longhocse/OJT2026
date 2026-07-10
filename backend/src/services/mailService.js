@@ -25,7 +25,7 @@ const getTransporter = () => {
   return transporter;
 };
 
-const sendMail = async ({ to, subject, text, html }) => {
+const sendMail = async ({ to, subject, text, html, attachments }) => {
   const smtp = getTransporter();
   if (!smtp) {
     logger.info("smtp_not_configured", { to, subject });
@@ -37,6 +37,7 @@ const sendMail = async ({ to, subject, text, html }) => {
     subject,
     text,
     html,
+    attachments,
   });
   return { sent: true };
 };

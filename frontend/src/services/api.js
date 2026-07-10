@@ -1,9 +1,8 @@
 import axios from "axios";
 import { store } from "../redux/store";
 import { setCredentials } from "../redux/slices/authSlice";
-import { clearClientSession } from "./authSession";
-
-const DEVELOPMENT_API_URL = "http://localhost:5000/api";
+const DEVELOPMENT_API_URL =
+  "https://securities-processed-gotta-proposition.trycloudflare.com/api";
 const SAME_ORIGIN_API_URL = "/api";
 
 const normalizeBaseUrl = (url) => url.replace(/\/+$/, "");
@@ -76,8 +75,8 @@ export const handleResponseError = async (error) => {
       error.config.headers.Authorization = `Bearer ${session.token}`;
       return api.request(error.config);
     } catch (_refreshError) {
-      void clearClientSession();
-      unauthorizedHandler?.();
+      // Keep the local session alive for demo/tunnel flows. A failed refresh can be caused by
+      // PayOS redirects, ngrok/cloudflare cookie quirks, or a short network hiccup.
     }
   }
 

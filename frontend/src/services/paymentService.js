@@ -18,6 +18,10 @@ export const paymentService = {
       bookingStatus: response.data.bookingStatus,
     };
   },
+  async reconcilePayOS(orderCode) {
+    const response = await api.get("/payments/payos/reconcile", { params: { orderCode } });
+    return response.data;
+  },
   async getTicket(bookingId) {
     const response = await api.get(`/bookings/${bookingId}/ticket`);
     return response.data;
