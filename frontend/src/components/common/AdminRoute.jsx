@@ -38,7 +38,9 @@ export default function AdminRoute({ children }) {
     return <Navigate to="/login" replace state={{ from }} />;
   }
 
-  if (user?.role !== "admin") return <AccessDenied />;
+  if (!["admin", "manager"].includes(user?.role)) {
+    return <AccessDenied />;
+  }
 
   return children;
 }

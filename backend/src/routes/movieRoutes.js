@@ -12,23 +12,27 @@ const {
   deleteOwnReview,
   moderateReview,
 } = require("../controllers/movieController");
-const { authMiddleware, adminMiddleware } = require("../middleware/authMiddleware");
+const {
+  authMiddleware,
+  adminMiddleware,
+  adminOrManagerMiddleware,
+} = require("../middleware/authMiddleware");
 const validation = require("../middleware/apiValidation");
 
 const router = express.Router();
 
 router.get("/", validation.movieList, getMovies);
 router.get("/:id", validation.idParam(), getMovieById);
-router.post("/", authMiddleware, adminMiddleware, validation.movieCreate, createMovie);
+router.post("/", authMiddleware, adminOrManagerMiddleware, validation.movieCreate, createMovie);
 router.put(
   "/:id",
   authMiddleware,
-  adminMiddleware,
+  adminOrManagerMiddleware,
   validation.idParam(),
   validation.movieUpdate,
   updateMovie,
 );
-router.delete("/:id", authMiddleware, adminMiddleware, validation.idParam(), deleteMovie);
+router.delete("/:id", authMiddleware, adminOrManagerMiddleware, validation.idParam(), deleteMovie);
 router.get("/:movieId/reviews", validation.idParam("movieId"), getReviews);
 router.post("/:movieId/reviews", authMiddleware, validation.reviewCreate, addReview);
 router.put(
@@ -47,7 +51,7 @@ router.delete(
 router.delete(
   "/:movieId/reviews/:reviewId/moderate",
   authMiddleware,
-  adminMiddleware,
+  adminOrManagerMiddleware,
   validation.reviewParams,
   moderateReview,
 );

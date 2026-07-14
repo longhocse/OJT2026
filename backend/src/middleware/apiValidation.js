@@ -405,7 +405,11 @@ module.exports = {
   adminUserUpdate: validateRequest({
     body: z
       .object({
-        role: z.enum(["customer", "admin"]).optional(),
+        role: z.enum([
+          "customer",
+          "manager",
+          "admin",
+        ]).optional(),
         is_active: z.boolean().optional(),
       })
       .refine((value) => Object.keys(value).length > 0, {

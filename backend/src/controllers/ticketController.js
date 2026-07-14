@@ -19,17 +19,29 @@ const loadTicketBooking = (bookingId) =>
 const safeUser = (user) =>
   user
     ? {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        phone: user.phone,
-      }
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      phone: user.phone,
+    }
     : null;
 
 const seatLabel = (bookingSeat) => {
   const seat = bookingSeat?.seat;
   if (!seat) return null;
   return `${String(seat.row || "").trim()}${seat.number}`;
+};
+const ensureManagerOwnsTheater = (booking, user) => {
+  if (
+    user?.role === "manager" &&
+    String(booking.show.screen.theater.id) !== String(user.theater_id)
+  ) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "You can only manage tickets in your theater"
+    );
+  }
 };
 
 const buildTicketResponse = (booking, { qrPayload, alreadyCheckedIn } = {}) => {
@@ -64,47 +76,47 @@ const buildTicketResponse = (booking, { qrPayload, alreadyCheckedIn } = {}) => {
       user: safeUser(booking.user),
       show: booking.show
         ? {
-            id: booking.show.id,
-            start_time: booking.show.start_time,
-            end_time: booking.show.end_time,
-            price: Number(booking.show.price || 0),
-            status: booking.show.status,
-            movie: booking.show.movie
-              ? {
-                  id: booking.show.movie.id,
-                  title: booking.show.movie.title,
-                  duration: Number(booking.show.movie.duration || 0),
-                  age_rating: booking.show.movie.age_rating,
+          id: booking.show.id,
+          start_time: booking.show.start_time,
+          end_time: booking.show.end_time,
+          price: Number(booking.show.price || 0),
+          status: booking.show.status,
+          movie: booking.show.movie
+            ? {
+              id: booking.show.movie.id,
+              title: booking.show.movie.title,
+              duration: Number(booking.show.movie.duration || 0),
+              age_rating: booking.show.movie.age_rating,
+            }
+            : null,
+          screen: booking.show.screen
+            ? {
+              id: booking.show.screen.id,
+              name: booking.show.screen.name,
+              theater: booking.show.screen.theater
+                ? {
+                  id: booking.show.screen.theater.id,
+                  name: booking.show.screen.theater.name,
+                  address: booking.show.screen.theater.address,
+                  city: booking.show.screen.theater.city,
                 }
-              : null,
-            screen: booking.show.screen
-              ? {
-                  id: booking.show.screen.id,
-                  name: booking.show.screen.name,
-                  theater: booking.show.screen.theater
-                    ? {
-                        id: booking.show.screen.theater.id,
-                        name: booking.show.screen.theater.name,
-                        address: booking.show.screen.theater.address,
-                        city: booking.show.screen.theater.city,
-                      }
-                    : null,
-                }
-              : null,
-          }
+                : null,
+            }
+            : null,
+        }
         : null,
       seats,
       bookingSeats: booking.bookingSeats || [],
       payment: booking.payment
         ? {
-            id: booking.payment.id,
-            provider: booking.payment.provider,
-            provider_transaction_id: booking.payment.provider_transaction_id,
-            amount: Number(booking.payment.amount || 0),
-            status: booking.payment.status,
-            refunded_amount: Number(booking.payment.refunded_amount || 0),
-            paid_at: booking.payment.paid_at,
-          }
+          id: booking.payment.id,
+          provider: booking.payment.provider,
+          provider_transaction_id: booking.payment.provider_transaction_id,
+          amount: Number(booking.payment.amount || 0),
+          status: booking.payment.status,
+          refunded_amount: Number(booking.payment.refunded_amount || 0),
+          paid_at: booking.payment.paid_at,
+        }
         : null,
     },
   };
@@ -113,7 +125,13 @@ const buildTicketResponse = (booking, { qrPayload, alreadyCheckedIn } = {}) => {
 exports.getTicket = async (req, res) => {
   const booking = await loadTicketBooking(req.params.id);
   if (!booking) throw new AppError(404, "BOOKING_NOT_FOUND", "Booking not found");
-  if (req.user.role !== "admin" && String(booking.user?.id) !== String(req.user.id)) {
+  ensureManagerOwnsTheater(booking, req.user);
+
+  if (
+    req.user.role !== "admin" &&
+    req.user.role !== "manager" &&
+    String(booking.user?.id) !== String(req.user.id)
+  ) {
     throw new AppError(403, "BOOKING_FORBIDDEN", "Forbidden");
   }
   if (!["confirmed", "used"].includes(booking.status)) {
@@ -129,7 +147,13 @@ exports.checkInTicket = async (req, res) => {
   const result = await withTransaction(async (manager) => {
     const booking = await manager.getRepository("Booking").findOne({
       where: { id: payload.bookingId },
-      relations: { show: true },
+      relations: {
+        show: {
+          screen: {
+            theater: true,
+          },
+        },
+      },
       lock: { mode: "pessimistic_write" },
     });
     if (
@@ -139,6 +163,7 @@ exports.checkInTicket = async (req, res) => {
     ) {
       throw new AppError(404, "TICKET_NOT_FOUND", "Ticket not found");
     }
+    ensureManagerOwnsTheater(booking, req.user);
     if (booking.status === "used") return { booking, alreadyCheckedIn: true };
     if (booking.status !== "confirmed") {
       throw new AppError(409, "TICKET_NOT_ACTIVE", "Ticket not active");

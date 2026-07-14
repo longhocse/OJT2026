@@ -4,11 +4,14 @@ import { Armchair, Ticket, TicketCheck, TicketX, Undo2, Wallet } from "lucide-re
 import { Link } from "react-router-dom";
 import { adminBookingService } from "../../services/adminBookingService";
 import { queryKeys } from "../../services/queryKeys";
+import { useSelector } from "react-redux";
 
 const money = (value) =>
   new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(value || 0);
 
 const AdminDashboard = () => {
+  const user = useSelector((state) => state.auth.user);
+  const isAdmin = user?.role === "admin";
   const [range, setRange] = useState({ dateFrom: "", dateTo: "" });
   const params = Object.fromEntries(Object.entries(range).filter(([, value]) => value));
   const statsQuery = useQuery({
@@ -49,9 +52,13 @@ const AdminDashboard = () => {
     <main className="mx-auto max-w-7xl p-6">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+          <h1 className="text-3xl font-bold">
+            {isAdmin ? "Admin Dashboard" : "Manager Dashboard"}
+          </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Số liệu booking, doanh thu, hoàn tiền và công suất phòng.
+            {isAdmin
+              ? "Bảng điều khiển dành cho quản trị viên."
+              : "Bảng điều khiển dành cho quản lý rạp."}
           </p>
         </div>
         <div className="flex flex-wrap gap-3">

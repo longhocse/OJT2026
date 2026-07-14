@@ -11,6 +11,7 @@ import { queryKeys } from "../../services/queryKeys";
 import { showService } from "../../services/showService";
 import { applyBackendErrors } from "../../validation/formErrors";
 import { showBulkSchema, showSchema } from "../../validation/schemas";
+import { useSelector } from "react-redux";
 
 const emptyForm = {
   movie: { id: "" },
@@ -77,6 +78,18 @@ const AdminShowForm = () => {
   const [formError, setFormError] = useState("");
   const [mode, setMode] = useState("single");
   const [bulkResult, setBulkResult] = useState(null);
+  const currentUser = useSelector((state) => state.auth.user);
+
+  useEffect(() => {
+    if (
+      !id &&
+      currentUser?.role === "manager" &&
+      currentUser?.theater_id
+    ) {
+      setCinemaId(currentUser.theater_id);
+    }
+  }, [id, currentUser]);
+
   const {
     register,
     handleSubmit,
@@ -229,18 +242,16 @@ const AdminShowForm = () => {
               <button
                 type="button"
                 onClick={() => setMode("single")}
-                className={`flex-1 rounded-lg px-4 py-2 font-semibold ${
-                  mode === "single" ? "bg-blue-600 text-white" : "text-gray-500"
-                }`}
+                className={`flex-1 rounded-lg px-4 py-2 font-semibold ${mode === "single" ? "bg-blue-600 text-white" : "text-gray-500"
+                  }`}
               >
                 Tạo 1 suất
               </button>
               <button
                 type="button"
                 onClick={() => setMode("bulk")}
-                className={`flex-1 rounded-lg px-4 py-2 font-semibold ${
-                  mode === "bulk" ? "bg-blue-600 text-white" : "text-gray-500"
-                }`}
+                className={`flex-1 rounded-lg px-4 py-2 font-semibold ${mode === "bulk" ? "bg-blue-600 text-white" : "text-gray-500"
+                  }`}
               >
                 Tạo hàng loạt
               </button>
@@ -268,22 +279,34 @@ const AdminShowForm = () => {
               </Field>
 
               <Field label="Rạp *">
-                <select
-                  value={cinemaId}
-                  onChange={(event) => {
-                    setCinemaId(event.target.value);
-                    setValue("screen.id", "", { shouldValidate: true });
-                    setBulkValue("screen.id", "", { shouldValidate: true });
-                  }}
-                  className="w-full rounded-lg border p-2 dark:bg-gray-700"
-                >
-                  <option value="">Chọn rạp</option>
-                  {cinemasQuery.data?.map((cinema) => (
-                    <option key={cinema.id} value={cinema.id}>
-                      {cinema.name}
-                    </option>
-                  ))}
-                </select>
+                {currentUser?.role === "manager" ? (
+                  <input
+                    value={
+                      cinemasQuery.data?.find(
+                        (c) => c.id === currentUser.theater_id
+                      )?.name || ""
+                    }
+                    readOnly
+                    className="w-full rounded-lg border p-2 dark:bg-gray-700"
+                  />
+                ) : (
+                  <select
+                    value={cinemaId}
+                    onChange={(event) => {
+                      setCinemaId(event.target.value);
+                      setValue("screen.id", "", { shouldValidate: true });
+                      setBulkValue("screen.id", "", { shouldValidate: true });
+                    }}
+                    className="w-full rounded-lg border p-2 dark:bg-gray-700"
+                  >
+                    <option value="">Chọn rạp</option>
+                    {cinemasQuery.data?.map((cinema) => (
+                      <option key={cinema.id} value={cinema.id}>
+                        {cinema.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </Field>
 
               <Field label="Phòng *" error={errors.screen?.id}>
@@ -381,22 +404,34 @@ const AdminShowForm = () => {
               </Field>
 
               <Field label="Rạp *">
-                <select
-                  value={cinemaId}
-                  onChange={(event) => {
-                    setCinemaId(event.target.value);
-                    setValue("screen.id", "", { shouldValidate: true });
-                    setBulkValue("screen.id", "", { shouldValidate: true });
-                  }}
-                  className="w-full rounded-lg border p-2 dark:bg-gray-700"
-                >
-                  <option value="">Chọn rạp</option>
-                  {cinemasQuery.data?.map((cinema) => (
-                    <option key={cinema.id} value={cinema.id}>
-                      {cinema.name}
-                    </option>
-                  ))}
-                </select>
+                {currentUser?.role === "manager" ? (
+                  <input
+                    value={
+                      cinemasQuery.data?.find(
+                        (c) => c.id === currentUser.theater_id
+                      )?.name || ""
+                    }
+                    readOnly
+                    className="w-full rounded-lg border p-2 dark:bg-gray-700"
+                  />
+                ) : (
+                  <select
+                    value={cinemaId}
+                    onChange={(event) => {
+                      setCinemaId(event.target.value);
+                      setValue("screen.id", "", { shouldValidate: true });
+                      setBulkValue("screen.id", "", { shouldValidate: true });
+                    }}
+                    className="w-full rounded-lg border p-2 dark:bg-gray-700"
+                  >
+                    <option value="">Chọn rạp</option>
+                    {cinemasQuery.data?.map((cinema) => (
+                      <option key={cinema.id} value={cinema.id}>
+                        {cinema.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </Field>
 
               <Field label="Phòng *" error={bulkErrors.screen?.id}>
@@ -450,11 +485,10 @@ const AdminShowForm = () => {
                     return (
                       <label
                         key={day.value}
-                        className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-semibold ${
-                          checked
-                            ? "border-blue-600 bg-blue-600 text-white"
-                            : "border-gray-300 dark:border-gray-600"
-                        }`}
+                        className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-semibold ${checked
+                          ? "border-blue-600 bg-blue-600 text-white"
+                          : "border-gray-300 dark:border-gray-600"
+                          }`}
                       >
                         <input
                           type="checkbox"

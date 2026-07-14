@@ -50,7 +50,8 @@ BEGIN TRY
         name NVARCHAR(100) NOT NULL,
         phone NVARCHAR(20) NULL,
         role NVARCHAR(20) NOT NULL
-            CONSTRAINT DF_users_role DEFAULT N'customer',
+            CONSTRAINT DF_users_role DEFAULT N'customer',   
+        theater_id UNIQUEIDENTIFIER NULL, --Thêm Manager
         is_active BIT NOT NULL
             CONSTRAINT DF_users_is_active DEFAULT 1,
         email_verified_at DATETIME2 NULL,
@@ -164,6 +165,11 @@ BEGIN TRY
         is_active BIT NOT NULL
             CONSTRAINT DF_theaters_is_active DEFAULT 1
     );
+
+    ALTER TABLE dbo.users --Thêm Manager
+    ADD CONSTRAINT FK_users_theater --Thêm Manager
+    FOREIGN KEY (theater_id) --Thêm Manager
+    REFERENCES dbo.theaters(id); --Thêm Manager
 
     CREATE TABLE dbo.screens (
         id UNIQUEIDENTIFIER NOT NULL
@@ -419,6 +425,7 @@ BEGIN TRY
 
     DECLARE @AdminId UNIQUEIDENTIFIER = '10000000-0000-4000-8000-000000000001';
     DECLARE @CustomerId UNIQUEIDENTIFIER = '10000000-0000-4000-8000-000000000002';
+    DECLARE @ManagerId UNIQUEIDENTIFIER = '10000000-0000-4000-8000-000000000003'; --Thêm Manager
     DECLARE @GenreId UNIQUEIDENTIFIER = '20000000-0000-4000-8000-000000000001';
     DECLARE @TheaterId UNIQUEIDENTIFIER = '30000000-0000-4000-8000-000000000001';
     DECLARE @ScreenId UNIQUEIDENTIFIER = '40000000-0000-4000-8000-000000000001';
@@ -426,16 +433,18 @@ BEGIN TRY
     DECLARE @ShowId UNIQUEIDENTIFIER = '60000000-0000-4000-8000-000000000001';
     DECLARE @PasswordHash NVARCHAR(255) = N'$2b$12$w2fMm9O6W26kT6qagQwXwe6rF0ApjOzGUAI.8h9wMgYW1YkliwhGq';
 
-    INSERT INTO dbo.users (id, email, password_hash, name, role, is_active, email_verified_at)
-    VALUES
-        (@AdminId, N'admin@movietap.local', @PasswordHash, N'Demo Admin', N'admin', 1, SYSUTCDATETIME()),
-        (@CustomerId, N'customer@movietap.local', @PasswordHash, N'Demo Customer', N'customer', 1, SYSUTCDATETIME());
-
     INSERT INTO dbo.genres (id, name, description)
     VALUES (@GenreId, N'Action', N'Development seed genre');
 
     INSERT INTO dbo.theaters (id, name, address, city, is_active)
     VALUES (@TheaterId, N'MovieTap Demo Cinema', N'1 Demo Street', N'Ho Chi Minh City', 1);
+
+    --Thêm Manager -- Đưa user xuống sau theaters
+    INSERT INTO dbo.users (id, email, password_hash, name, role, theater_id, is_active, email_verified_at) --Thêm Manager (theater_id)
+    VALUES
+        (@AdminId, N'admin@movietap.local', @PasswordHash, N'Demo Admin', N'admin', NULL, 1, SYSUTCDATETIME()),--Thêm Manager (NULL)
+        (@ManagerId, N'manager@movietap.local', @PasswordHash, N'Demo Manager', N'manager', @TheaterId, 1, SYSUTCDATETIME()), --Thêm Manager (@TheaterId)
+        (@CustomerId, N'customer@movietap.local', @PasswordHash, N'Demo Customer', N'customer', NULL, 1, SYSUTCDATETIME()); --Thêm Manager (NULL)
 
     INSERT INTO dbo.screens (id, theater_id, name, total_seats, layout_json, is_active)
     VALUES (

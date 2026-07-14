@@ -96,6 +96,11 @@ const normalizeBookingError = (error) => {
 
 const isAdmin = (user) => user?.role === "admin";
 
+const isManager = (user) => user?.role === "manager";
+
+const isAdminOrManager = (user) =>
+  ["admin", "manager"].includes(user?.role);
+
 const ownsBooking = (booking, user) =>
   booking?.user?.id != null && user?.id != null && String(booking.user.id) === String(user.id);
 
@@ -106,6 +111,19 @@ const sanitizeBooking = (booking) => {
   return { ...booking, user: safeUser };
 };
 
+const ensureManagerOwnsTheater = (booking, user) => {
+  if (
+    user?.role === "manager" &&
+    String(booking.show.screen.theater.id) !== String(user.theater_id)
+  ) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "You can only manage bookings in your theater"
+    );
+  }
+};
+
 const findBookingsForUser = async (userId) => {
   const repo = AppDataSource.getRepository("Booking");
   return repo.find({
@@ -113,6 +131,9 @@ const findBookingsForUser = async (userId) => {
     relations: {
       show: {
         movie: true,
+        screen: {
+          theater: true,
+        },
       },
       bookingSeats: {
         seat: true,
@@ -214,10 +235,10 @@ exports.createBooking = async (req, res, next) => {
       refunded_amount: 0,
       expires_at: new Date(
         Date.now() +
-          (paymentMethod === "cash"
-            ? env.CASH_PAYMENT_TTL_MINUTES
-            : env.PAYMENT_PENDING_TTL_MINUTES) *
-            60000,
+        (paymentMethod === "cash"
+          ? env.CASH_PAYMENT_TTL_MINUTES
+          : env.PAYMENT_PENDING_TTL_MINUTES) *
+        60000,
       ),
       ticket_code: `MT-${randomUUID().replaceAll("-", "").toUpperCase()}`,
     });
@@ -319,7 +340,8 @@ exports.getBookingById = async (req, res) => {
     },
   });
   if (!booking) throw new AppError(404, "BOOKING_NOT_FOUND", "Booking not found");
-  if (!isAdmin(req.user) && !ownsBooking(booking, req.user)) {
+  ensureManagerOwnsTheater(booking, req.user);
+  if (!isAdminOrManager(req.user) && !ownsBooking(booking, req.user)) {
     throw new AppError(403, "BOOKING_FORBIDDEN", "Forbidden");
   }
 
@@ -329,16 +351,31 @@ exports.getBookingById = async (req, res) => {
 // SỬA: Dùng object syntax cho relations
 exports.getUserBookings = async (req, res) => {
   const requestedUserId = req.params.userId;
-  if (!isAdmin(req.user) && String(requestedUserId) !== String(req.user.id)) {
+  if (!isAdminOrManager(req.user) && String(requestedUserId) !== String(req.user.id)) {
     throw new AppError(403, "BOOKING_FORBIDDEN", "Forbidden");
   }
 
-  const bookings = await findBookingsForUser(isAdmin(req.user) ? requestedUserId : req.user.id);
+  const bookings = await findBookingsForUser(
+    isAdminOrManager(req.user)
+      ? requestedUserId
+      : req.user.id
+  );
+
+  if (req.user.role === "manager") {
+    bookings.forEach((booking) =>
+      ensureManagerOwnsTheater(booking, req.user)
+    );
+  }
   res.json(bookings.map(sanitizeBooking));
 };
 
 exports.getMyBookings = async (req, res) => {
   const bookings = await findBookingsForUser(req.user.id);
+  if (req.user.role === "manager") {
+    bookings.forEach((booking) =>
+      ensureManagerOwnsTheater(booking, req.user)
+    );
+  }
   res.json(bookings.map(sanitizeBooking));
 };
 
@@ -356,7 +393,11 @@ exports.cancelBooking = async (req, res, next) => {
       where: { id: req.params.id },
       relations: {
         user: true,
-        show: true,
+        show: {
+          screen: {
+            theater: true,
+          },
+        },
         bookingSeats: {
           seat: true,
         },
@@ -364,7 +405,8 @@ exports.cancelBooking = async (req, res, next) => {
       lock: { mode: "pessimistic_write" },
     });
     if (!booking) throw new BookingRequestError(404, "Not found");
-    if (!isAdmin(req.user) && !ownsBooking(booking, req.user)) {
+    ensureManagerOwnsTheater(booking, req.user);
+    if (!isAdminOrManager(req.user) && !ownsBooking(booking, req.user)) {
       throw new BookingRequestError(403, "Forbidden");
     }
     if (booking.status === "cancelled") {
@@ -382,9 +424,12 @@ exports.cancelBooking = async (req, res, next) => {
     const refundAmount =
       booking.status === "pending_payment" ? 0 : calculateRefund(booking.total_price, showTime);
     booking.status = "cancelled";
-    booking.cancellation_reason = isAdmin(req.user)
-      ? "Cancelled by administrator"
-      : "Cancelled by customer";
+    booking.cancellation_reason =
+      req.user.role === "admin"
+        ? "Cancelled by administrator"
+        : req.user.role === "manager"
+          ? "Cancelled by manager"
+          : "Cancelled by customer";
     booking.cancelled_at = new Date();
     applyRefundSummary(booking, refundAmount);
     await applyPaymentRefund(queryRunner.manager, booking, refundAmount);

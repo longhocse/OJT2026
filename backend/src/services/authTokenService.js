@@ -20,13 +20,14 @@ const publicUser = (user) => ({
   name: user.name,
   phone: user.phone ?? null,
   role: user.role,
+  theater_id: user.theater_id ?? null,
   is_active: user.is_active !== false,
   email_verified_at: user.email_verified_at ?? null,
   created_at: user.created_at,
 });
 
 const signAccessToken = (user) =>
-  jwt.sign({ id: user.id, email: user.email, role: user.role }, env.JWT_SECRET, {
+  jwt.sign({ id: user.id, email: user.email, role: user.role, theater_id: user.theater_id }, env.JWT_SECRET, {
     expiresIn: env.JWT_EXPIRES_IN,
   });
 

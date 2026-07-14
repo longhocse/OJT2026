@@ -39,6 +39,11 @@ export const catalogService = {
     return normalizeUser(response.data);
   },
 
+  async assignCinema(id, data) {
+    const response = await api.patch(`/users/${id}/assign-cinema`, data);
+    return response.data;
+  },
+
   async getCinemas() {
     const response = await api.get("/cinemas");
     return Array.isArray(response.data) ? response.data.map(normalizeTheater) : [];

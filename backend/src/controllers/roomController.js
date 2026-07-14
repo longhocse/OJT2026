@@ -29,7 +29,7 @@ const loadRoom = (id) =>
     relations: { theater: true, seats: true },
   });
 
-const saveRoomWithSeats = async ({ roomId, input }) => {
+const saveRoomWithSeats = async ({ roomId, input, user }) => {
   const queryRunner = AppDataSource.createQueryRunner();
   let transactionStarted = false;
 
@@ -43,8 +43,31 @@ const saveRoomWithSeats = async ({ roomId, input }) => {
     const showRepo = queryRunner.manager.getRepository("Show");
     const bookingSeatRepo = queryRunner.manager.getRepository("BookingSeat");
 
-    const theater = await theaterRepo.findOneBy({ id: input.theater.id, is_active: true });
-    if (!theater) throw new AppError(404, "CINEMA_NOT_FOUND", "Cinema not found");
+    let theaterId = input.theater.id;
+
+    if (user.role === "manager") {
+      theaterId = user.theater_id;
+    }
+
+    const theater = await theaterRepo.findOneBy({
+      id: theaterId,
+      is_active: true,
+    });
+
+    if (!theater) {
+      throw new AppError(404, "CINEMA_NOT_FOUND", "Cinema not found");
+    }
+
+    if (
+      user.role === "manager" &&
+      String(theater.id) !== String(user.theater_id)
+    ) {
+      throw new AppError(
+        403,
+        "FORBIDDEN",
+        "You can only manage rooms in your theater"
+      );
+    }
 
     let room;
     let existingSeats = [];
@@ -54,6 +77,16 @@ const saveRoomWithSeats = async ({ roomId, input }) => {
         relations: { seats: true, theater: true },
         lock: { mode: "pessimistic_write" },
       });
+      if (
+        user.role === "manager" &&
+        String(room.theater.id) !== String(user.theater_id)
+      ) {
+        throw new AppError(
+          403,
+          "FORBIDDEN",
+          "You can only manage rooms in your theater"
+        );
+      }
       if (!room) throw new AppError(404, "ROOM_NOT_FOUND", "Room not found");
       existingSeats = room.seats || [];
     } else {
@@ -144,24 +177,60 @@ const saveRoomWithSeats = async ({ roomId, input }) => {
 };
 
 exports.getRooms = async (req, res) => {
+  console.log("ROLE =", req.user?.role);
+  console.log("THEATER =", req.user?.theater_id);
   const { cinemaId } = req.query;
   const qb = AppDataSource.getRepository("Screen")
     .createQueryBuilder("screen")
     .leftJoinAndSelect("screen.theater", "theater")
     .where("screen.is_active = :active", { active: true })
     .andWhere("theater.is_active = :active", { active: true });
-  if (cinemaId) qb.andWhere("theater.id = :cinemaId", { cinemaId });
+
+  if (cinemaId) {
+    qb.andWhere("theater.id = :cinemaId", {
+      cinemaId,
+    });
+  }
+
+  if (req.user?.role === "manager") {
+    qb.andWhere("theater.id = :theaterId", {
+      theaterId: req.user.theater_id,
+    });
+  }
+
   res.json(await qb.orderBy("screen.name", "ASC").getMany());
 };
 
 exports.getRoomById = async (req, res) => {
   const room = await loadRoom(req.params.id);
-  if (!room) throw new AppError(404, "ROOM_NOT_FOUND", "Room not found");
+
+  if (!room) {
+    throw new AppError(
+      404,
+      "ROOM_NOT_FOUND",
+      "Room not found"
+    );
+  }
+
+  if (
+    req.user?.role === "manager" &&
+    String(room.theater.id) !== String(req.user.theater_id)
+  ) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "You can only view rooms in your theater"
+    );
+  }
+
   res.json(room);
 };
 
 exports.createRoom = async (req, res) => {
-  const roomId = await saveRoomWithSeats({ input: res.locals.validated.body });
+  const roomId = await saveRoomWithSeats({
+    input: res.locals.validated.body,
+    user: req.user,
+  });
   await recordAuditLog(req, {
     action: "room.create",
     resourceType: "Screen",
@@ -175,6 +244,7 @@ exports.updateRoom = async (req, res) => {
   const roomId = await saveRoomWithSeats({
     roomId: req.params.id,
     input: res.locals.validated.body,
+    user: req.user,
   });
   await recordAuditLog(req, {
     action: "room.update",
@@ -192,9 +262,30 @@ exports.deleteRoom = async (req, res) => {
   const roomRepo = AppDataSource.getRepository("Screen");
   const room = await roomRepo.findOne({
     where: { id: req.params.id },
-    relations: { seats: true },
+    relations: {
+      seats: true,
+      theater: true,
+    },
   });
-  if (!room) throw new AppError(404, "ROOM_NOT_FOUND", "Room not found");
+
+  if (!room) {
+    throw new AppError(
+      404,
+      "ROOM_NOT_FOUND",
+      "Room not found"
+    );
+  }
+
+  if (
+    req.user.role === "manager" &&
+    String(room.theater.id) !== String(req.user.theater_id)
+  ) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "You can only delete rooms in your theater"
+    );
+  }
 
   if (showCount > 0) {
     room.is_active = false;

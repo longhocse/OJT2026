@@ -37,6 +37,7 @@ export const normalizeUser = (value) => {
     name: text(raw.name),
     phone: nullableText(raw.phone),
     role: text(raw.role, "customer"),
+    theater_id: nullableText(raw.theater_id),
     is_active: raw.is_active !== false,
     email_verified_at: nullableDate(raw.email_verified_at),
     created_at: nullableDate(raw.created_at),

@@ -20,6 +20,13 @@ const removeSensitiveFields = (value) => {
   );
 };
 
+const isAdmin = (user) => user?.role === "admin";
+
+const isManager = (user) => user?.role === "manager";
+
+const isAdminOrManager = (user) =>
+  ["admin", "manager"].includes(user?.role);
+
 const safe = (payment) => ({
   id: payment.id,
   provider: payment.provider,
@@ -33,6 +40,19 @@ const safe = (payment) => ({
   updated_at: payment.updated_at,
   booking: removeSensitiveFields(payment.booking),
 });
+const ensureManagerOwnsTheater = (payment, user) => {
+  if (
+    user?.role === "manager" &&
+    String(payment.booking.show.screen.theater.id) !==
+    String(user.theater_id)
+  ) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "You can only manage payments in your theater"
+    );
+  }
+};
 
 const notifyTicketIfConfirmed = async (result) => {
   if (
@@ -63,11 +83,25 @@ exports.handleWebhook = async (req, res) => {
 exports.getPayment = async (req, res) => {
   const payment = await AppDataSource.getRepository("Payment").findOne({
     where: { id: req.params.id },
-    relations: { booking: { user: true } },
+    relations: {
+      booking: {
+        user: true,
+        show: {
+          screen: {
+            theater: true,
+          },
+        },
+      },
+    },
   });
   if (!payment) throw new AppError(404, "PAYMENT_NOT_FOUND", "Payment not found");
-  if (req.user.role !== "admin" && String(payment.booking.user?.id) !== String(req.user.id))
+  ensureManagerOwnsTheater(payment, req.user);
+  if (
+    !isAdminOrManager(req.user) &&
+    String(payment.booking.user?.id) !== String(req.user.id)
+  ) {
     throw new AppError(403, "PAYMENT_FORBIDDEN", "Forbidden");
+  }
   res.json(safe(payment));
 };
 exports.completeMockPayment = async (req, res) => {
@@ -99,7 +133,14 @@ exports.getAdminPayments = async (req, res) => {
     .leftJoinAndSelect("payment.booking", "booking")
     .leftJoinAndSelect("booking.user", "user")
     .leftJoinAndSelect("booking.show", "show")
-    .leftJoinAndSelect("show.movie", "movie");
+    .leftJoinAndSelect("show.movie", "movie")
+    .leftJoinAndSelect("show.screen", "screen")
+    .leftJoinAndSelect("screen.theater", "theater");
+  if (req.user.role === "manager") {
+    qb.andWhere("theater.id = :theaterId", {
+      theaterId: req.user.theater_id,
+    });
+  }
   if (status) qb.andWhere("payment.status = :status", { status });
   if (provider) qb.andWhere("payment.provider = :provider", { provider });
   if (search)
@@ -121,10 +162,22 @@ exports.confirmCashPayment = async (req, res) => {
   const result = await withTransaction(async (manager) => {
     const payment = await manager.getRepository("Payment").findOne({
       where: { id: req.params.id },
-      relations: { booking: { show: true, bookingSeats: { seat: true } } },
+      relations: {
+        booking: {
+          show: {
+            screen: {
+              theater: true,
+            },
+          },
+          bookingSeats: {
+            seat: true,
+          },
+        },
+      },
       lock: { mode: "pessimistic_write" },
     });
     if (!payment) throw new AppError(404, "PAYMENT_NOT_FOUND", "Payment not found");
+    ensureManagerOwnsTheater(payment, req.user);
     if (payment.provider !== "cash")
       throw new AppError(409, "PAYMENT_NOT_CASH", "Not cash payment");
     if (payment.status === "paid" && payment.booking.status === "confirmed")
@@ -168,10 +221,19 @@ exports.refundPayment = async (req, res) => {
   const payment = await withTransaction(async (manager) => {
     const current = await manager.getRepository("Payment").findOne({
       where: { id: req.params.id },
-      relations: { booking: true },
+      relations: {
+        booking: {
+          show: {
+            screen: {
+              theater: true,
+            },
+          },
+        },
+      },
       lock: { mode: "pessimistic_write" },
     });
     if (!current) throw new AppError(404, "PAYMENT_NOT_FOUND", "Payment not found");
+    ensureManagerOwnsTheater(current, req.user);
     if (current.booking.status !== "cancelled")
       throw new AppError(409, "BOOKING_NOT_CANCELLED", "Cancel booking first");
     const updated = await applyPaymentRefund(

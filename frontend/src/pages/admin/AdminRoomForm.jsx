@@ -10,6 +10,7 @@ import { catalogService } from "../../services/catalogService";
 import { queryKeys } from "../../services/queryKeys";
 import { applyBackendErrors } from "../../validation/formErrors";
 import { roomSchema } from "../../validation/schemas";
+import { useSelector } from "react-redux";
 
 const emptyForm = { name: "", theater: { id: "" }, seats: [] };
 
@@ -17,6 +18,7 @@ const AdminRoomForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const currentUser = useSelector((state) => state.auth.user);
   const [formError, setFormError] = useState("");
   const {
     register,
@@ -50,6 +52,16 @@ const AdminRoomForm = () => {
       seats: roomQuery.data.seats || [],
     });
   }, [reset, roomQuery.data]);
+
+  useEffect(() => {
+    if (
+      !id &&
+      currentUser?.role === "manager" &&
+      currentUser?.theater_id
+    ) {
+      setValue("theater.id", currentUser.theater_id);
+    }
+  }, [id, currentUser, setValue]);
 
   const mutation = useMutation({
     mutationFn: (data) =>
@@ -101,18 +113,40 @@ const AdminRoomForm = () => {
         </label>
         <label className="block">
           <span className="mb-1 block">Rạp *</span>
-          <select
-            {...register("theater.id")}
-            aria-invalid={Boolean(theaterError)}
-            className="w-full rounded-lg border p-2 dark:bg-gray-700"
-          >
-            <option value="">Chọn rạp</option>
-            {cinemasQuery.data?.map((cinema) => (
-              <option key={cinema.id} value={cinema.id}>
-                {cinema.name}
-              </option>
-            ))}
-          </select>
+
+          {currentUser?.role === "manager" ? (
+            <>
+              <input
+                value={
+                  cinemasQuery.data?.find(
+                    (c) => c.id === currentUser.theater_id
+                  )?.name || ""
+                }
+                readOnly
+                className="w-full rounded-lg border p-2 dark:bg-gray-700"
+              />
+
+              <input
+                type="hidden"
+                {...register("theater.id")}
+              />
+            </>
+          ) : (
+            <select
+              {...register("theater.id")}
+              aria-invalid={Boolean(theaterError)}
+              className="w-full rounded-lg border p-2 dark:bg-gray-700"
+            >
+              <option value="">Chọn rạp</option>
+
+              {cinemasQuery.data?.map((cinema) => (
+                <option key={cinema.id} value={cinema.id}>
+                  {cinema.name}
+                </option>
+              ))}
+            </select>
+          )}
+
           {theaterError && (
             <span role="alert" className="text-sm text-red-500">
               {theaterError.message}

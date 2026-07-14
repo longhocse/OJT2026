@@ -5,7 +5,7 @@ const {
   getSeatsByShow,
   createShow,
 } = require("../controllers/showController");
-const { authMiddleware, adminMiddleware } = require("../middleware/authMiddleware");
+const { authMiddleware, adminMiddleware, adminOrManagerMiddleware } = require("../middleware/authMiddleware");
 const validation = require("../middleware/apiValidation");
 
 const router = express.Router();
@@ -13,6 +13,6 @@ const router = express.Router();
 router.get("/", validation.showList, getShows);
 router.get("/:id", validation.idParam(), getShowById);
 router.get("/:showId/seats", validation.idParam("showId"), getSeatsByShow);
-router.post("/", authMiddleware, adminMiddleware, validation.showCreate, createShow);
+router.post("/", authMiddleware, adminOrManagerMiddleware, validation.showCreate, createShow);
 
 module.exports = router;

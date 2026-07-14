@@ -7,22 +7,22 @@ const {
   updateRoom,
   deleteRoom,
 } = require("../controllers/roomController");
-const { authMiddleware, adminMiddleware } = require("../middleware/authMiddleware");
+const { authMiddleware, adminMiddleware, adminOrManagerMiddleware } = require("../middleware/authMiddleware");
 const validation = require("../middleware/apiValidation");
 
 const router = express.Router();
 
-router.get("/", validation.roomList, getRooms);
-router.get("/:id", validation.idParam(), getRoomById);
-router.post("/", authMiddleware, adminMiddleware, validation.roomCreate, createRoom);
+router.get("/", authMiddleware, validation.roomList, getRooms);
+router.get("/:id", authMiddleware, validation.idParam(), getRoomById);
+router.post("/", authMiddleware, adminOrManagerMiddleware, validation.roomCreate, createRoom);
 router.put(
   "/:id",
   authMiddleware,
-  adminMiddleware,
+  adminOrManagerMiddleware,
   validation.idParam(),
   validation.roomUpdate,
   updateRoom,
 );
-router.delete("/:id", authMiddleware, adminMiddleware, validation.idParam(), deleteRoom);
+router.delete("/:id", authMiddleware, adminOrManagerMiddleware, validation.idParam(), deleteRoom);
 
 module.exports = router;

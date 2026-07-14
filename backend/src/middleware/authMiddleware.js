@@ -16,9 +16,32 @@ exports.authMiddleware = (req, res, next) => {
   }
 };
 
+/*Phân quyền cho admin*/
 exports.adminMiddleware = (req, res, next) => {
   if (req.user?.role !== "admin") {
     return next(new AppError(403, "ADMIN_REQUIRED", "Admin access required"));
+  }
+  next();
+};
+
+/*Phân quyền cho manager*/
+exports.managerMiddleware = (req, res, next) => {
+  if (req.user?.role !== "manager") {
+    return next(new AppError(403, "MANAGER_REQUIRED", "Manager access required"));
+  }
+  next();
+};
+
+/*Phân quyền cho cả admin và manager*/
+exports.adminOrManagerMiddleware = (req, res, next) => {
+  if (!["admin", "manager"].includes(req.user?.role)) {
+    return next(
+      new AppError(
+        403,
+        "ADMIN_OR_MANAGER_REQUIRED",
+        "Admin or Manager access required"
+      )
+    );
   }
   next();
 };

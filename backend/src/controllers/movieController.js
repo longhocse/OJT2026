@@ -193,6 +193,13 @@ exports.getMovieById = async (req, res) => {
 };
 
 exports.createMovie = async (req, res) => {
+  if (req.user.role === "manager") {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "Managers cannot create movies"
+    );
+  }
   const repository = AppDataSource.getRepository("Movie");
   const { genreIds = [], ...fields } = res.locals.validated.body;
   const movie = repository.create({
@@ -211,6 +218,13 @@ exports.createMovie = async (req, res) => {
 };
 
 exports.updateMovie = async (req, res) => {
+  if (req.user.role === "manager") {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "Managers cannot update movies"
+    );
+  }
   const repository = AppDataSource.getRepository("Movie");
   const movie = await repository.findOne({
     where: { id: req.params.id, is_active: true },
@@ -231,6 +245,13 @@ exports.updateMovie = async (req, res) => {
 };
 
 exports.deleteMovie = async (req, res) => {
+  if (req.user.role === "manager") {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "Managers cannot delete movies"
+    );
+  }
   const repository = AppDataSource.getRepository("Movie");
   const movie = await repository.findOneBy({ id: req.params.id });
   if (!movie) throw new AppError(404, "MOVIE_NOT_FOUND", "Movie not found");

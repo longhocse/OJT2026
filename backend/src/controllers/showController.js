@@ -102,11 +102,34 @@ const validateSchedule = async (manager, input, excludeId) => {
     .findOneBy({ id: input.movie.id, is_active: true });
   if (!movie) throw new AppError(404, "MOVIE_NOT_FOUND", "Movie not found");
 
-  const screen = await manager.getRepository("Screen").findOneBy({
-    id: input.screen.id,
-    is_active: true,
+  const screen = await manager.getRepository("Screen").findOne({
+    where: {
+      id: input.screen.id,
+      is_active: true,
+    },
+    relations: {
+      theater: true,
+    },
   });
-  if (!screen) throw new AppError(404, "ROOM_NOT_FOUND", "Room not found");
+
+  if (!screen) {
+    throw new AppError(
+      404,
+      "ROOM_NOT_FOUND",
+      "Room not found"
+    );
+  }
+
+  if (
+    input.user?.role === "manager" &&
+    String(screen.theater.id) !== String(input.user.theater_id)
+  ) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "You can only manage shows in your theater"
+    );
+  }
   if (screen.total_seats < 1) {
     throw new AppError(409, "ROOM_HAS_NO_SEATS", "Room must have seats before scheduling a show");
   }
@@ -160,6 +183,11 @@ exports.getShows = async (req, res) => {
     .leftJoinAndSelect("show.screen", "screen")
     .leftJoinAndSelect("screen.theater", "theater");
   applyShowFilters(qb, query);
+  if (req.user?.role === "manager") {
+    qb.andWhere("theater.id = :theaterId", {
+      theaterId: req.user.theater_id,
+    });
+  }
   res.json((await qb.orderBy("show.start_time", "ASC").getMany()).map(serializeShow));
 };
 
@@ -172,6 +200,11 @@ exports.getAdminShows = async (req, res) => {
     .leftJoinAndSelect("show.screen", "screen")
     .leftJoinAndSelect("screen.theater", "theater");
   applyShowFilters(qb, query, { admin: true });
+  if (req.user.role === "manager") {
+    qb.andWhere("theater.id = :theaterId", {
+      theaterId: req.user.theater_id,
+    });
+  }
   const [shows, total] = await qb
     .orderBy("show.start_time", "DESC")
     .skip((page - 1) * limit)
@@ -186,6 +219,17 @@ exports.getAdminShows = async (req, res) => {
 exports.getShowById = async (req, res) => {
   const show = await loadShow(AppDataSource.getRepository("Show"), req.params.id);
   if (!show) throw new AppError(404, "SHOW_NOT_FOUND", "Show not found");
+
+  if (
+    req.user?.role === "manager" &&
+    String(show.screen.theater.id) !== String(req.user.theater_id)
+  ) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "You can only view shows in your theater"
+    );
+  }
 
   const occupied = await AppDataSource.getRepository("ShowSeatState").count({
     where: { show: { id: show.id }, status: "booked" },
@@ -202,6 +246,16 @@ exports.getShowById = async (req, res) => {
 exports.getAdminShowById = async (req, res) => {
   const show = await loadShow(AppDataSource.getRepository("Show"), req.params.id);
   if (!show) throw new AppError(404, "SHOW_NOT_FOUND", "Show not found");
+  if (
+    req.user.role === "manager" &&
+    String(show.screen.theater.id) !== String(req.user.theater_id)
+  ) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "You can only view shows in your theater"
+    );
+  }
   res.json(serializeShow(show));
 };
 
@@ -209,9 +263,24 @@ exports.getSeatsByShow = async (req, res) => {
   const { showId } = req.params;
   const show = await AppDataSource.getRepository("Show").findOne({
     where: { id: showId },
-    relations: { screen: { seats: true } },
+    relations: {
+      screen: {
+        seats: true,
+        theater: true,
+      },
+    },
   });
   if (!show) throw new AppError(404, "SHOW_NOT_FOUND", "Show not found");
+  if (
+    req.user?.role === "manager" &&
+    String(show.screen.theater.id) !== String(req.user.theater_id)
+  ) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "You can only view seats in your theater"
+    );
+  }
   if (show.status === "cancelled") {
     throw new AppError(409, "SHOW_CANCELLED", "Cancelled shows do not have bookable seats");
   }
@@ -236,7 +305,10 @@ exports.getSeatsByShow = async (req, res) => {
 exports.createShow = async (req, res) => {
   const showId = await withTransaction(async (manager) => {
     const input = res.locals.validated.body;
-    const { movie, screen } = await validateSchedule(manager, input);
+    const { movie, screen } = await validateSchedule(manager, {
+      ...input,
+      user: req.user,
+    });
     const showRepo = manager.getRepository("Show");
     const show = showRepo.create({
       ...input,
@@ -267,9 +339,14 @@ exports.createBulkShows = async (req, res) => {
       .findOneBy({ id: input.movie.id, is_active: true });
     if (!movie) throw new AppError(404, "MOVIE_NOT_FOUND", "Movie not found");
 
-    const screen = await manager.getRepository("Screen").findOneBy({
-      id: input.screen.id,
-      is_active: true,
+    const screen = await manager.getRepository("Screen").findOne({
+      where: {
+        id: input.screen.id,
+        is_active: true,
+      },
+      relations: {
+        theater: true,
+      },
     });
     if (!screen) throw new AppError(404, "ROOM_NOT_FOUND", "Room not found");
     if (screen.total_seats < 1) {
@@ -291,6 +368,7 @@ exports.createBulkShows = async (req, res) => {
           start_time,
           end_time,
           price: input.price,
+          user: req.user,
         };
 
         try {
@@ -357,6 +435,18 @@ exports.updateShow = async (req, res) => {
       lock: { mode: "pessimistic_write" },
     });
     if (!show) throw new AppError(404, "SHOW_NOT_FOUND", "Show not found");
+    const fullShow = await loadShow(showRepo, show.id);
+
+    if (
+      req.user.role === "manager" &&
+      String(fullShow.screen.theater.id) !== String(req.user.theater_id)
+    ) {
+      throw new AppError(
+        403,
+        "FORBIDDEN",
+        "You can only update shows in your theater"
+      );
+    }
     if (show.status === "cancelled") {
       throw new AppError(409, "SHOW_CANCELLED", "A cancelled show cannot be edited");
     }
@@ -368,7 +458,14 @@ exports.updateShow = async (req, res) => {
     }
 
     const input = res.locals.validated.body;
-    const { movie, screen } = await validateSchedule(manager, input, show.id);
+    const { movie, screen } = await validateSchedule(
+      manager,
+      {
+        ...input,
+        user: req.user,
+      },
+      show.id
+    );
     Object.assign(show, input, { movie, screen });
     await showRepo.save(show);
     return show.id;
@@ -389,6 +486,18 @@ exports.cancelShow = async (req, res) => {
       lock: { mode: "pessimistic_write" },
     });
     if (!show) throw new AppError(404, "SHOW_NOT_FOUND", "Show not found");
+    const fullShow = await loadShow(showRepo, show.id);
+
+    if (
+      req.user.role === "manager" &&
+      String(fullShow.screen.theater.id) !== String(req.user.theater_id)
+    ) {
+      throw new AppError(
+        403,
+        "FORBIDDEN",
+        "You can only cancel shows in your theater"
+      );
+    }
     if (show.status === "cancelled") {
       throw new AppError(409, "SHOW_ALREADY_CANCELLED", "Show is already cancelled");
     }
@@ -460,6 +569,18 @@ exports.deleteShow = async (req, res) => {
       lock: { mode: "pessimistic_write" },
     });
     if (!show) throw new AppError(404, "SHOW_NOT_FOUND", "Show not found");
+    const fullShow = await loadShow(showRepo, show.id);
+
+    if (
+      req.user.role === "manager" &&
+      String(fullShow.screen.theater.id) !== String(req.user.theater_id)
+    ) {
+      throw new AppError(
+        403,
+        "FORBIDDEN",
+        "You can only delete shows in your theater"
+      );
+    }
     if (new Date(show.start_time) <= new Date()) {
       throw new AppError(409, "SHOW_ALREADY_STARTED", "A started show cannot be deleted");
     }

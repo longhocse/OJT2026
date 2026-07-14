@@ -10,7 +10,7 @@ const {
   deactivateCinema,
   restoreCinema,
 } = require("../controllers/cinemaController");
-const { authMiddleware, adminMiddleware } = require("../middleware/authMiddleware");
+const { authMiddleware, adminMiddleware, adminOrManagerMiddleware } = require("../middleware/authMiddleware");
 const validation = require("../middleware/apiValidation");
 
 const router = express.Router();
@@ -18,17 +18,17 @@ const router = express.Router();
 router.get(
   "/admin/list",
   authMiddleware,
-  adminMiddleware,
+  adminOrManagerMiddleware,
   validation.adminCinemaList,
   getAdminCinemas,
 );
 router.get("/", getCinemas);
 router.get("/:id", validation.idParam(), getCinemaById);
-router.post("/", authMiddleware, adminMiddleware, validation.cinemaCreate, createCinema);
+router.post("/", authMiddleware, adminOrManagerMiddleware, validation.cinemaCreate, createCinema);
 router.put(
   "/:id",
   authMiddleware,
-  adminMiddleware,
+  adminOrManagerMiddleware,
   validation.idParam(),
   validation.cinemaUpdate,
   updateCinema,
@@ -36,11 +36,11 @@ router.put(
 router.patch(
   "/:id/deactivate",
   authMiddleware,
-  adminMiddleware,
+  adminOrManagerMiddleware,
   validation.idParam(),
   deactivateCinema,
 );
-router.patch("/:id/restore", authMiddleware, adminMiddleware, validation.idParam(), restoreCinema);
+router.patch("/:id/restore", authMiddleware, adminOrManagerMiddleware, validation.idParam(), restoreCinema);
 router.delete("/:id", authMiddleware, adminMiddleware, validation.idParam(), deleteCinema);
 
 module.exports = router;

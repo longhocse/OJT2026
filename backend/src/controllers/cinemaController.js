@@ -17,6 +17,12 @@ exports.getAdminCinemas = async (req, res) => {
     .createQueryBuilder("cinema")
     .leftJoinAndSelect("cinema.screens", "screens");
 
+  if (req.user.role === "manager") {
+    qb.where("cinema.id = :theaterId", {
+      theaterId: req.user.theater_id,
+    });
+  }
+
   if (status === "active") qb.where("cinema.is_active = :active", { active: true });
   if (status === "inactive") qb.where("cinema.is_active = :active", { active: false });
   if (search) {
@@ -50,10 +56,28 @@ exports.getCinemaById = async (req, res) => {
     relations: { screens: true },
   });
   if (!cinema) throw new AppError(404, "CINEMA_NOT_FOUND", "Cinema not found");
+  if (
+    req.user &&
+    req.user.role === "manager" &&
+    String(cinema.id) !== String(req.user.theater_id)
+  ) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "You can only access your assigned theater"
+    );
+  }
   res.json(cinema);
 };
 
 exports.createCinema = async (req, res) => {
+  if (req.user.role === "manager") {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "Managers cannot create theaters"
+    );
+  }
   const repo = AppDataSource.getRepository("Theater");
   const cinema = repo.create(res.locals.validated.body);
   await repo.save(cinema);
@@ -70,6 +94,16 @@ exports.updateCinema = async (req, res) => {
   const repo = AppDataSource.getRepository("Theater");
   const cinema = await repo.findOneBy({ id: req.params.id, is_active: true });
   if (!cinema) throw new AppError(404, "CINEMA_NOT_FOUND", "Cinema not found");
+  if (
+    req.user.role === "manager" &&
+    String(cinema.id) !== String(req.user.theater_id)
+  ) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "You can only update your assigned theater"
+    );
+  }
   repo.merge(cinema, res.locals.validated.body);
   await repo.save(cinema);
   await recordAuditLog(req, {
@@ -85,6 +119,16 @@ exports.deleteCinema = async (req, res) => {
   const repo = AppDataSource.getRepository("Theater");
   const cinema = await repo.findOneBy({ id: req.params.id });
   if (!cinema) throw new AppError(404, "CINEMA_NOT_FOUND", "Cinema not found");
+  if (
+    req.user.role === "manager" &&
+    String(cinema.id) !== String(req.user.theater_id)
+  ) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "You can only delete your assigned theater"
+    );
+  }
 
   const screenRepo = AppDataSource.getRepository("Screen");
   const showCount = await AppDataSource.getRepository("Show")
@@ -126,6 +170,16 @@ exports.deactivateCinema = async (req, res) => {
     relations: { screens: true },
   });
   if (!cinema) throw new AppError(404, "CINEMA_NOT_FOUND", "Cinema not found");
+  if (
+    req.user.role === "manager" &&
+    String(cinema.id) !== String(req.user.theater_id)
+  ) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "You can only deactivate your assigned theater"
+    );
+  }
   cinema.is_active = false;
   await repo.save(cinema);
   await recordAuditLog(req, {
@@ -144,6 +198,16 @@ exports.restoreCinema = async (req, res) => {
     relations: { screens: true },
   });
   if (!cinema) throw new AppError(404, "CINEMA_NOT_FOUND", "Cinema not found");
+  if (
+    req.user.role === "manager" &&
+    String(cinema.id) !== String(req.user.theater_id)
+  ) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "You can only restore your assigned theater"
+    );
+  }
   cinema.is_active = true;
   await repo.save(cinema);
   await recordAuditLog(req, {

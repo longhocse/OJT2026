@@ -16,6 +16,12 @@ const AdminUsers = () => {
     queryKey: queryKeys.users.list(params),
     queryFn: () => catalogService.getUsers(params),
   });
+
+  const cinemasQuery = useQuery({
+    queryKey: ["cinemas"],
+    queryFn: () => catalogService.getCinemas(),
+  });
+
   const accessMutation = useMutation({
     mutationFn: ({ id, data }) => catalogService.updateUserAccess(id, data),
     onSuccess: () => {
@@ -26,9 +32,31 @@ const AdminUsers = () => {
       setActionError(error.response?.data?.message || "Không thể cập nhật quyền tài khoản."),
   });
 
+  const assignCinemaMutation = useMutation({
+    mutationFn: ({ id, cinemaId }) =>
+      catalogService.assignCinema(id, {
+        cinemaId,
+      }),
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.users.all,
+      });
+
+      setActionError("");
+    },
+
+    onError: (error) =>
+      setActionError(
+        error.response?.data?.message ||
+        "Không thể gán rạp cho manager."
+      ),
+  });
+
   const handleSearch = (event) => {
     setSearch(event.target.value);
     setPage(1);
+    setActionError("");
   };
 
   return (
@@ -41,7 +69,7 @@ const AdminUsers = () => {
           <div>
             <h1 className="text-3xl font-black">Quản lý người dùng</h1>
             <p className="mt-1 text-sm text-gray-400">
-              Backend hiện chỉ hỗ trợ xem, tìm kiếm và phân trang; chưa có API sửa hoặc xóa user.
+              Quản lý tài khoản, phân quyền và khóa/mở khóa người dùng.
             </p>
           </div>
         </div>
@@ -87,6 +115,7 @@ const AdminUsers = () => {
                   <th className="p-4">Email</th>
                   <th className="p-4">Điện thoại</th>
                   <th className="p-4">Vai trò</th>
+                  <th className="p-4">Rạp quản lý</th>
                   <th className="p-4">Ngày tạo</th>
                 </tr>
               </thead>
@@ -94,14 +123,22 @@ const AdminUsers = () => {
                 {usersQuery.data.data.map((user) => (
                   <tr key={user.id}>
                     <td className="p-4 font-medium">{user.name}</td>
+
                     <td className="p-4">{user.email}</td>
-                    <td className="p-4 text-gray-400">{user.phone || "Chưa cập nhật"}</td>
+
+                    <td className="p-4 text-gray-400">
+                      {user.phone || "Chưa cập nhật"}
+                    </td>
+
                     <td className="p-4">
                       <div className="flex flex-wrap items-center gap-2">
                         <select
                           aria-label={`Vai trò ${user.email}`}
                           value={user.role}
-                          disabled={accessMutation.isPending}
+                          disabled={
+                            accessMutation.isPending &&
+                            accessMutation.variables?.id === user.id
+                          }
                           onChange={(event) =>
                             accessMutation.mutate({
                               id: user.id,
@@ -111,11 +148,16 @@ const AdminUsers = () => {
                           className="rounded border border-gray-700 bg-gray-900 p-1"
                         >
                           <option value="customer">customer</option>
+                          <option value="manager">manager</option>
                           <option value="admin">admin</option>
                         </select>
+
                         <button
                           type="button"
-                          disabled={accessMutation.isPending}
+                          disabled={
+                            accessMutation.isPending &&
+                            accessMutation.variables?.id === user.id
+                          }
                           onClick={() =>
                             accessMutation.mutate({
                               id: user.id,
@@ -126,11 +168,52 @@ const AdminUsers = () => {
                         >
                           {user.is_active ? "Khóa" : "Mở khóa"}
                         </button>
+
                         <span className={user.is_active ? "text-green-400" : "text-red-400"}>
                           {user.is_active ? "Hoạt động" : "Đã khóa"}
                         </span>
                       </div>
                     </td>
+
+                    {/* Rạp quản lý */}
+                    <td className="p-4">
+                      {user.role === "manager" ? (
+                        <select
+                          value={user.theater_id || ""}
+                          disabled={
+                            assignCinemaMutation.isPending &&
+                            assignCinemaMutation.variables?.id === user.id
+                          }
+                          onChange={(event) =>
+                            assignCinemaMutation.mutate({
+                              id: user.id,
+                              cinemaId: event.target.value,
+                            })
+                          }
+                          className="rounded border border-gray-700 bg-gray-900 p-2"
+                        >
+                          <option value="">
+                            {cinemasQuery.isPending
+                              ? "Đang tải rạp..."
+                              : "-- Chọn rạp --"}
+                          </option>
+
+                          {cinemasQuery.isError ? (
+                            <option value="">Không tải được danh sách rạp</option>
+                          ) : (
+                            cinemasQuery.data?.map((cinema) => (
+                              <option key={cinema.id} value={cinema.id}>
+                                {cinema.name}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      ) : (
+                        <span className="text-gray-500">Không áp dụng</span>
+                      )}
+                    </td>
+
+                    {/* Ngày tạo */}
                     <td className="p-4 text-gray-400">
                       {user.created_at
                         ? new Date(user.created_at).toLocaleDateString("vi-VN")
@@ -140,7 +223,7 @@ const AdminUsers = () => {
                 ))}
                 {usersQuery.data.data.length === 0 && (
                   <tr>
-                    <td colSpan="5" className="p-10 text-center text-gray-400">
+                    <td colSpan="6" className="p-10 text-center text-gray-400">
                       Không tìm thấy người dùng.
                     </td>
                   </tr>

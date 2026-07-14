@@ -6,17 +6,17 @@ const {
   updateGenre,
   deleteGenre,
 } = require("../controllers/genreController");
-const { authMiddleware, adminMiddleware } = require("../middleware/authMiddleware");
+const { authMiddleware, adminMiddleware, adminOrManagerMiddleware } = require("../middleware/authMiddleware");
 const validation = require("../middleware/apiValidation");
 
 const router = express.Router();
 
 router.get("/", getGenres);
-router.post("/", authMiddleware, adminMiddleware, validation.genreCreate, createGenre);
+router.post("/", authMiddleware,  adminOrManagerMiddleware, validation.genreCreate, createGenre);
 router.put(
   "/:id",
   authMiddleware,
-  adminMiddleware,
+   adminOrManagerMiddleware,
   validation.idParam(),
   validation.genreUpdate,
   updateGenre,

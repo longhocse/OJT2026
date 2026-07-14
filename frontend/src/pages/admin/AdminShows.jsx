@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useSelector } from "react-redux";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ban, Edit, Plus, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -17,6 +18,7 @@ const statusLabels = {
 
 const AdminShows = () => {
   const queryClient = useQueryClient();
+  const currentUser = useSelector((state) => state.auth.user);
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState({
     movieId: "",
@@ -71,6 +73,15 @@ const AdminShows = () => {
     }));
   };
 
+  useEffect(() => {
+    if (
+      currentUser?.role === "manager" &&
+      currentUser?.theater_id
+    ) {
+      updateFilter("theaterId", currentUser.theater_id);
+    }
+  }, [currentUser]);
+
   const cancelShow = (show) => {
     const reason = window.prompt(`Nhập lý do hủy suất ${show.movie?.title || ""}:`);
     if (!reason) return;
@@ -100,12 +111,31 @@ const AdminShows = () => {
             label: movie.title,
           }))}
         />
-        <FilterSelect
-          label="Rạp"
-          value={filters.theaterId}
-          onChange={(value) => updateFilter("theaterId", value)}
-          options={cinemasQuery.data?.map((cinema) => ({ value: cinema.id, label: cinema.name }))}
-        />
+        {currentUser?.role === "manager" ? (
+          <label>
+            <span className="mb-1 block text-sm">Rạp</span>
+
+            <input
+              value={
+                cinemasQuery.data?.find(
+                  (c) => c.id === currentUser.theater_id
+                )?.name || ""
+              }
+              readOnly
+              className="w-full rounded-lg border p-2 dark:bg-gray-700"
+            />
+          </label>
+        ) : (
+          <FilterSelect
+            label="Rạp"
+            value={filters.theaterId}
+            onChange={(value) => updateFilter("theaterId", value)}
+            options={cinemasQuery.data?.map((cinema) => ({
+              value: cinema.id,
+              label: cinema.name,
+            }))}
+          />
+        )}
         <FilterSelect
           label="Phòng"
           value={filters.screenId}

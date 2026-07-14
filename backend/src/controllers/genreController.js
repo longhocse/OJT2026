@@ -7,6 +7,13 @@ exports.getGenres = async (req, res) => {
 };
 
 exports.createGenre = async (req, res) => {
+  if (req.user.role === "manager") {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "Managers cannot create genres"
+    );
+  }
   const repo = AppDataSource.getRepository("Genre");
   if (await repo.findOne({ where: { name: req.body.name } })) {
     throw new AppError(409, "GENRE_ALREADY_EXISTS", "Genre already exists");
@@ -17,6 +24,13 @@ exports.createGenre = async (req, res) => {
 };
 
 exports.updateGenre = async (req, res) => {
+  if (req.user.role === "manager") {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "Managers cannot update genres"
+    );
+  }
   const repo = AppDataSource.getRepository("Genre");
   const genre = await repo.findOneBy({ id: req.params.id });
   if (!genre) throw new AppError(404, "GENRE_NOT_FOUND", "Genre not found");
@@ -26,6 +40,13 @@ exports.updateGenre = async (req, res) => {
 };
 
 exports.deleteGenre = async (req, res) => {
+  if (req.user.role === "manager") {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "Managers cannot delete genres"
+    );
+  }
   const result = await AppDataSource.getRepository("Genre").delete(req.params.id);
   if (result.affected === 0) throw new AppError(404, "GENRE_NOT_FOUND", "Genre not found");
   res.json({ message: "Deleted" });

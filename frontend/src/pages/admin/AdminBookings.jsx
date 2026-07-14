@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSelector } from "react-redux";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, XCircle } from "lucide-react";
 import AccessibleDialog from "../../components/common/AccessibleDialog";
@@ -43,6 +44,15 @@ const AdminBookings = () => {
     dateFrom: "",
     dateTo: "",
   });
+
+  const currentUser = useSelector((state) => state.auth.user);
+
+  useEffect(() => {
+    if (currentUser?.role === "manager" && currentUser?.theater_id) {
+      setFilters((prev) => ({ ...prev, cinemaId: currentUser.theater_id }));
+    }
+  }, [currentUser]);
+
   const params = {
     page,
     limit: 20,
@@ -118,14 +128,27 @@ const AdminBookings = () => {
             moviesQuery.data?.data?.map((movie) => [movie.id, movie.title]) || [],
           )}
         />
-        <FilterSelect
-          label="Rạp"
-          value={filters.cinemaId}
-          onChange={(value) => updateFilter("cinemaId", value)}
-          options={Object.fromEntries(
-            cinemasQuery.data?.map((cinema) => [cinema.id, cinema.name]) || [],
-          )}
-        />
+        {currentUser?.role === "manager" ? (
+          <label>
+            <span className="mb-1 block text-sm">Rạp</span>
+            <input
+              value={
+                cinemasQuery.data?.find((c) => c.id === currentUser.theater_id)?.name || "Đang tải..."
+              }
+              readOnly
+              className="w-full rounded-lg border p-2 bg-gray-100 dark:bg-gray-700 cursor-not-allowed"
+            />
+          </label>
+        ) : (
+          <FilterSelect
+            label="Rạp"
+            value={filters.cinemaId}
+            onChange={(value) => updateFilter("cinemaId", value)}
+            options={Object.fromEntries(
+              cinemasQuery.data?.map((cinema) => [cinema.id, cinema.name]) || [],
+            )}
+          />
+        )}
         <FilterInput
           label="Từ ngày"
           type="date"
@@ -148,7 +171,7 @@ const AdminBookings = () => {
               status: "",
               paymentStatus: "",
               movieId: "",
-              cinemaId: "",
+              cinemaId: currentUser?.role === "manager" ? currentUser.theater_id : "",
               dateFrom: "",
               dateTo: "",
             });

@@ -32,6 +32,10 @@ module.exports = new EntitySchema({
       length: 20,
       default: "customer",
     },
+    theater_id: {
+      type: "uuid",
+      nullable: true,
+    },
     is_active: {
       type: "bit",
       default: true,
@@ -46,6 +50,13 @@ module.exports = new EntitySchema({
     },
   },
   relations: {
+    theater: {
+      target: "Theater",
+      type: "many-to-one",
+      joinColumn: {
+        name: "theater_id",
+      },
+    },
     bookings: {
       target: "Booking",
       type: "one-to-many",
