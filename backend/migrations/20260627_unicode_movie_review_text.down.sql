@@ -1,0 +1,2 @@
+ALTER TABLE dbo.reviews ALTER COLUMN comment VARCHAR(MAX) NULL;
+ALTER TABLE dbo.movies ALTER COLUMN description VARCHAR(MAX) NULL;

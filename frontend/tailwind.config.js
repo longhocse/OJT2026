@@ -1,0 +1,63 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+    darkMode: "class",
+    content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+    theme: {
+        extend: {
+            colors: {
+                // Cinema Noir color palette
+                primary: "#D4AF37",
+                "primary-container": "#D4AF37",
+                "on-primary": "#131313",
+                "on-primary-container": "#131313",
+                secondary: "#e9c349",
+                "secondary-container": "#af8d11",
+                surface: "#131313",
+                "surface-dim": "#131313",
+                "surface-bright": "#3a3939",
+                "surface-container": "#201f1f",
+                "surface-container-high": "#2a2a2a",
+                "surface-container-highest": "#353534",
+                "surface-container-low": "#1c1b1b",
+                "surface-container-lowest": "#0e0e0e",
+                "on-surface": "#e5e2e1",
+                "on-surface-variant": "#e9bcb6",
+                background: "#131313",
+                "on-background": "#e5e2e1",
+                error: "#ffb4ab",
+                "error-container": "#93000a",
+                outline: "#af8782",
+                "outline-variant": "#5e3f3b",
+            },
+            fontFamily: {
+                "display-lg": ["Montserrat", "sans-serif"],
+                "headline-md": ["Montserrat", "sans-serif"],
+                button: ["Montserrat", "sans-serif"],
+                "body-md": ["Inter", "sans-serif"],
+                "body-lg": ["Inter", "sans-serif"],
+                "label-sm": ["Inter", "sans-serif"],
+            },
+            fontSize: {
+                "display-lg": ["48px", { lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "700" }],
+                "display-lg-mobile": ["32px", { lineHeight: "40px", fontWeight: "700" }],
+                "headline-md": ["24px", { lineHeight: "32px", fontWeight: "600" }],
+                "body-lg": ["18px", { lineHeight: "28px", fontWeight: "400" }],
+                "body-md": ["16px", { lineHeight: "24px", fontWeight: "400" }],
+                "label-sm": ["12px", { lineHeight: "16px", letterSpacing: "0.05em", fontWeight: "600" }],
+                button: ["14px", { lineHeight: "20px", letterSpacing: "0.01em", fontWeight: "600" }],
+            },
+            spacing: {
+                "margin-mobile": "16px",
+                "margin-desktop": "64px",
+                gutter: "24px",
+                "max-width": "1440px",
+            },
+            borderRadius: {
+                lg: "0.5rem",
+                xl: "0.75rem",
+                full: "9999px",
+            },
+        },
+    },
+    plugins: [],
+};
