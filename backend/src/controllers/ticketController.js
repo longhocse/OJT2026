@@ -2,7 +2,10 @@ const { AppDataSource } = require("../config/database");
 const { AppError } = require("../utils/AppError");
 const { createTicketPayload, verifyTicketPayload } = require("../tickets/ticketSecurity");
 const { withTransaction } = require("../services/paymentLifecycleService");
-const { assertBookingAccess } = require("../services/accessControlService");
+const {
+  STAFF_ROLES,
+  assertBookingAccess,
+} = require("../services/accessControlService");
 const { recordAuditLog } = require("../services/auditLogService");
 
 const ticketRelations = {
@@ -115,7 +118,13 @@ const buildTicketResponse = (booking, { qrPayload, alreadyCheckedIn } = {}) => {
 exports.getTicket = async (req, res) => {
   const booking = await loadTicketBooking(req.params.id);
   if (!booking) throw new AppError(404, "BOOKING_NOT_FOUND", "Booking not found");
-  if (req.user.role !== "admin" && String(booking.user?.id) !== String(req.user.id)) {
+  if (STAFF_ROLES.includes(req.user.role)) {
+    await assertBookingAccess(AppDataSource.manager, req, booking.id);
+  }
+  if (
+    req.user.role !== "admin" &&
+    String(booking.user?.id) !== String(req.user.id)
+  ) {
     throw new AppError(403, "BOOKING_FORBIDDEN", "Forbidden");
   }
   if (!["confirmed", "used"].includes(booking.status)) {

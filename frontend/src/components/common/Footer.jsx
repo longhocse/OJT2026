@@ -1,6 +1,6 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Facebook, Twitter, Instagram, Youtube } from 'lucide-react';
+import React from "react";
+import { Link } from "react-router-dom";
+import { Facebook, Twitter, Instagram, Youtube } from "lucide-react";
 
 const Footer = () => {
   return (
@@ -11,21 +11,38 @@ const Footer = () => {
           <div className="col-span-1 md:col-span-1">
             <h2 className="text-2xl font-bold text-primary mb-4">MovieTap</h2>
             <p className="text-sm text-on-surface-variant">
-              Experience cinema like never before. Book tickets, enjoy VIP perks, and get AI-powered recommendations.
+              Experience cinema like never before. Book tickets, enjoy VIP perks, and get AI-powered
+              recommendations.
             </p>
             <div className="flex gap-4 mt-6">
-              <a href="#" className="text-on-surface-variant hover:text-primary transition-colors">
+              <button
+                type="button"
+                aria-label="Facebook"
+                className="text-on-surface-variant hover:text-primary transition-colors"
+              >
                 <Facebook size={20} />
-              </a>
-              <a href="#" className="text-on-surface-variant hover:text-primary transition-colors">
+              </button>
+              <button
+                type="button"
+                aria-label="Twitter"
+                className="text-on-surface-variant hover:text-primary transition-colors"
+              >
                 <Twitter size={20} />
-              </a>
-              <a href="#" className="text-on-surface-variant hover:text-primary transition-colors">
+              </button>
+              <button
+                type="button"
+                aria-label="Instagram"
+                className="text-on-surface-variant hover:text-primary transition-colors"
+              >
                 <Instagram size={20} />
-              </a>
-              <a href="#" className="text-on-surface-variant hover:text-primary transition-colors">
+              </button>
+              <button
+                type="button"
+                aria-label="YouTube"
+                className="text-on-surface-variant hover:text-primary transition-colors"
+              >
                 <Youtube size={20} />
-              </a>
+              </button>
             </div>
           </div>
 
@@ -33,10 +50,29 @@ const Footer = () => {
           <div>
             <h3 className="font-semibold mb-4">Quick Links</h3>
             <ul className="space-y-2 text-sm text-on-surface-variant">
-              <li><Link to="/movies" className="hover:text-primary transition-colors">Now Showing</Link></li>
-              <li><Link to="/movies?status=coming_soon" className="hover:text-primary transition-colors">Coming Soon</Link></li>
-              <li><Link to="/my-bookings" className="hover:text-primary transition-colors">My Bookings</Link></li>
-              <li><Link to="/offers" className="hover:text-primary transition-colors">Offers</Link></li>
+              <li>
+                <Link to="/movies" className="hover:text-primary transition-colors">
+                  Now Showing
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/movies?status=coming_soon"
+                  className="hover:text-primary transition-colors"
+                >
+                  Coming Soon
+                </Link>
+              </li>
+              <li>
+                <Link to="/my-bookings" className="hover:text-primary transition-colors">
+                  My Bookings
+                </Link>
+              </li>
+              <li>
+                <Link to="/offers" className="hover:text-primary transition-colors">
+                  Offers
+                </Link>
+              </li>
             </ul>
           </div>
 
@@ -44,10 +80,26 @@ const Footer = () => {
           <div>
             <h3 className="font-semibold mb-4">Support</h3>
             <ul className="space-y-2 text-sm text-on-surface-variant">
-              <li><a href="#" className="hover:text-primary transition-colors">FAQ</a></li>
-              <li><a href="#" className="hover:text-primary transition-colors">Contact Us</a></li>
-              <li><a href="#" className="hover:text-primary transition-colors">Privacy Policy</a></li>
-              <li><a href="#" className="hover:text-primary transition-colors">Terms of Service</a></li>
+              <li>
+                <button type="button" className="hover:text-primary transition-colors">
+                  FAQ
+                </button>
+              </li>
+              <li>
+                <button type="button" className="hover:text-primary transition-colors">
+                  Contact Us
+                </button>
+              </li>
+              <li>
+                <button type="button" className="hover:text-primary transition-colors">
+                  Privacy Policy
+                </button>
+              </li>
+              <li>
+                <button type="button" className="hover:text-primary transition-colors">
+                  Terms of Service
+                </button>
+              </li>
             </ul>
           </div>
 

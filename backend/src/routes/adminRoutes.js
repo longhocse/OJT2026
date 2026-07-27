@@ -99,7 +99,7 @@ router.get(
 );
 router.get(
   "/audit-logs",
-  requireAnyRole(["admin", "manager"]),
+  requireAnyRole(["admin"]),
   validation.adminAuditLogList,
   auditLogController.getAuditLogs,
 );

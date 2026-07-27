@@ -18,6 +18,7 @@ const menuItems = [
 const ADMIN_PLAYLIST = [
   { title: "Chill Mùa Hạ", src: "/audio/chill.mp3" },
   { title: "Rap", src: "/audio/rap.mp3" },
+  { title: "Nhạc miền tây", src: "/audio/mientay.mp3" },
 ];
 const MUSIC_STATE_KEY = "adminBackgroundMusic";
 const MUSIC_TRACK_KEY = "adminBackgroundMusicTrack";

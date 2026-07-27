@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 
 const SCRIPT_ID = "google-identity-services";
+// This is a public OAuth identifier, not a secret. Keep a committed default so a fresh clone works.
+const DEFAULT_GOOGLE_CLIENT_ID =
+  "917795743488-0q3bc60rg3pg9kn337j2p3g1rhda56fr.apps.googleusercontent.com";
 
 const loadGoogleIdentity = () =>
   new Promise((resolve, reject) => {
@@ -30,7 +33,7 @@ export default function GoogleSignInButton({ onCredential, disabled = false }) {
   const containerRef = useRef(null);
   const callbackRef = useRef(onCredential);
   const [loadError, setLoadError] = useState(false);
-  const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID?.trim();
+  const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID?.trim() || DEFAULT_GOOGLE_CLIENT_ID;
 
   callbackRef.current = onCredential;
 
@@ -65,11 +68,7 @@ export default function GoogleSignInButton({ onCredential, disabled = false }) {
   }, [clientId]);
 
   if (!clientId) {
-    return (
-      <p className="text-center text-xs text-amber-700">
-        Google Login chưa được cấu hình.
-      </p>
-    );
+    return <p className="text-center text-xs text-amber-700">Google Login chưa được cấu hình.</p>;
   }
   if (loadError) {
     return <p className="text-center text-sm text-[#DC2626]">Không thể tải đăng nhập Google.</p>;

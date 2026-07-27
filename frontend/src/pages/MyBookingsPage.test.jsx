@@ -57,7 +57,7 @@ describe("MyBookingsPage", () => {
     renderPage();
 
     expect(await screen.findByText("Test Movie")).toBeInTheDocument();
-    expect(screen.getByText("A1")).toBeInTheDocument();
+    expect(screen.getByText("Ghế: A1")).toBeInTheDocument();
     expect(bookingService.getMyBookings).toHaveBeenCalledTimes(1);
   });
 
@@ -93,7 +93,7 @@ describe("MyBookingsPage", () => {
     renderPage();
 
     expect(
-      await screen.findByText("Không thể hủy trong vòng 2 giờ trước suất chiếu."),
+      await screen.findByText(/Không thể hủy trong vòng 2 giờ trước suất chiếu\./),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Hủy booking" })).not.toBeInTheDocument();
   });

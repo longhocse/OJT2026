@@ -3,6 +3,11 @@ const { z } = require("zod");
 
 dotenv.config({ quiet: true });
 
+// Google OAuth client IDs are public identifiers, so this project default is safe to commit.
+// GOOGLE_CLIENT_ID can still override it for another deployment or Google Cloud project.
+const DEFAULT_GOOGLE_CLIENT_ID =
+  "917795743488-0q3bc60rg3pg9kn337j2p3g1rhda56fr.apps.googleusercontent.com";
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -31,7 +36,7 @@ const envSchema = z
     PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
     EMAIL_VERIFICATION_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(60),
     FRONTEND_URL: z.string().url().default("http://localhost:3000"),
-    GOOGLE_CLIENT_ID: z.string().min(20).optional(),
+    GOOGLE_CLIENT_ID: z.string().min(20).default(DEFAULT_GOOGLE_CLIENT_ID),
     SMTP_HOST: z.string().min(1).optional(),
     SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional(),
     SMTP_SECURE: z

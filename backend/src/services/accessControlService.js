@@ -42,9 +42,9 @@ const activeTheaterIds = (assignments = []) =>
     .filter((assignment) => assignment?.is_active !== false && assignment.theater?.id)
     .map((assignment) => String(assignment.theater.id));
 
-const getScopedTheaterIds = async (manager, userId) => {
+const getScopedTheaterIds = async (manager, userId, role) => {
   const assignments = await manager.getRepository("UserTheater").find({
-    where: { user: { id: userId }, is_active: true },
+    where: { user: { id: userId }, role_at_theater: role, is_active: true },
     relations: { theater: true },
   });
   return activeTheaterIds(assignments);
@@ -56,7 +56,13 @@ const attachAccessScope = async (req, _res, next) => {
       req.accessScope = { theaterIds: null };
       return next();
     }
-    req.accessScope = { theaterIds: await getScopedTheaterIds(AppDataSource.manager, req.user.id) };
+    req.accessScope = {
+      theaterIds: await getScopedTheaterIds(
+        AppDataSource.manager,
+        req.user.id,
+        req.user.role,
+      ),
+    };
     return next();
   } catch (error) {
     return next(error);

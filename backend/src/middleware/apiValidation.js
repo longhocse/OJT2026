@@ -13,16 +13,6 @@ const pagination = {
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
 };
-const dateRangeQuery = z
-  .object({
-    dateFrom: z.iso.date().optional(),
-    dateTo: z.iso.date().optional(),
-  })
-  .refine((value) => !value.dateFrom || !value.dateTo || value.dateFrom <= value.dateTo, {
-    path: ["dateTo"],
-    message: "dateTo must be on or after dateFrom",
-  });
-
 const movie = z.object({
   title: z.string().trim().min(1).max(200),
   description: optionalText(10000),

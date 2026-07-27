@@ -118,6 +118,18 @@ test("auth register, login and profile flow", { concurrency: false }, async (t) 
       refreshTokens.push(token);
       return token;
     },
+    createQueryBuilder: () => ({
+      update() {
+        return this;
+      },
+      set() {
+        return this;
+      },
+      where() {
+        return this;
+      },
+      execute: async () => ({ affected: refreshTokens.length }),
+    }),
   };
   const verificationRepository = {
     create: (data) => ({ id: `verification-${verificationTokens.length + 1}`, ...data }),
@@ -207,6 +219,30 @@ test("auth register, login and profile flow", { concurrency: false }, async (t) 
   assert.equal(profile.status, 200);
   assert.equal(profile.body.id, USER_ID);
   assert.equal("password_hash" in profile.body, false);
+
+  const updatedProfile = await request(app)
+    .put("/api/auth/profile")
+    .set("Authorization", `Bearer ${login.body.token}`)
+    .send({ name: "Updated User", phone: "0901234567", role: "admin" });
+  assert.equal(updatedProfile.status, 200);
+  assert.equal(updatedProfile.body.name, "Updated User");
+  assert.equal(updatedProfile.body.phone, "0901234567");
+  assert.equal(updatedProfile.body.role, "customer");
+
+  const invalidPassword = await request(app)
+    .post("/api/auth/change-password")
+    .set("Authorization", `Bearer ${login.body.token}`)
+    .send({ currentPassword: "WrongPass123", newPassword: "NewStrongPass123" });
+  assert.equal(invalidPassword.status, 400);
+  assert.equal(invalidPassword.body.code, "CURRENT_PASSWORD_INVALID");
+
+  const changedPassword = await request(app)
+    .post("/api/auth/change-password")
+    .set("Authorization", `Bearer ${login.body.token}`)
+    .send({ currentPassword: "StrongPass123", newPassword: "NewStrongPass123" });
+  assert.equal(changedPassword.status, 200);
+  assert.equal(changedPassword.body.message, "Password changed");
+  assert.equal(await bcrypt.compare("NewStrongPass123", storedUser.password_hash), true);
 });
 
 test("admin can create, update and delete movies", { concurrency: false }, async (t) => {

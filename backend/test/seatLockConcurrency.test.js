@@ -34,7 +34,24 @@ const startTestServer = async () => {
   app.use(errorHandler);
 
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = createSupertestFetch(app);
+  const appFetch = createSupertestFetch(app);
+  globalThis.fetch = async (url, options) => {
+    if (String(url).includes("/v2/payment-requests")) {
+      return new globalThis.Response(
+        JSON.stringify({
+          code: "00",
+          data: {
+            orderCode: 123456789,
+            checkoutUrl: "https://pay.example.test/checkout",
+            qrCode: "test-qr",
+            paymentLinkId: "test-link",
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    return appFetch(url, options);
+  };
   return {
     baseUrl: "http://test.local",
     close: async () => {
@@ -177,7 +194,7 @@ test("two users cannot lock or book the same show seat", { concurrency: false },
   const unauthorizedBooking = await post(server.baseUrl, "/api/bookings", loser.userId, {
     showId: SHOW_ID,
     seatIds: [SEAT_ID],
-    paymentMethod: "cash",
+    paymentMethod: "payos",
     lockToken: winner.body.lockToken,
   });
   assert.equal(unauthorizedBooking.status, 403);
@@ -185,7 +202,7 @@ test("two users cannot lock or book the same show seat", { concurrency: false },
   const successfulBooking = await post(server.baseUrl, "/api/bookings", winner.userId, {
     showId: SHOW_ID,
     seatIds: [SEAT_ID],
-    paymentMethod: "cash",
+    paymentMethod: "payos",
     lockToken: winner.body.lockToken,
   });
   assert.equal(successfulBooking.status, 201);

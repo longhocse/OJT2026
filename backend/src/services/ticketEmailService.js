@@ -54,7 +54,7 @@ const buildTicketEmail = async (booking) => {
   const paidAmount = booking.payment?.amount ?? booking.total_price;
   const openTicketUrl = ticketUrl();
   const qrPayload = createTicketPayload(booking);
-  const qrCid = `ticket-qr-${booking.id}@movietap`;
+  const qrCid = `ticket-${booking.id}@movietap.local`;
   const qrBuffer = await QRCode.toBuffer(qrPayload, {
     errorCorrectionLevel: "M",
     margin: 2,
@@ -149,6 +149,8 @@ const buildTicketEmail = async (booking) => {
       {
         filename: `${ticketCode}.png`,
         content: qrBuffer,
+        contentType: "image/png",
+        contentDisposition: "inline",
         cid: qrCid,
       },
     ],
@@ -189,4 +191,4 @@ const sendTicketEmailForBooking = async (bookingId) => {
   }
 };
 
-module.exports = { sendTicketEmailForBooking };
+module.exports = { buildTicketEmail, sendTicketEmailForBooking };

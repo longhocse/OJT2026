@@ -37,9 +37,9 @@ const getReviewSummary = (reviews, fallbackRating = 0, fallbackCount = 0) => {
 const formatRating = (rating) =>
   Number(rating) > 0
     ? new Intl.NumberFormat("vi-VN", {
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    }).format(Number(rating))
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }).format(Number(rating))
     : "N/A";
 
 // --- Components UI màu sắc mới ---
@@ -202,7 +202,9 @@ const MovieDetailPage = () => {
           reviews: updatedReviews,
         };
       });
-      setReviewNotice(result.created ? "Đánh giá đã được tạo." : "Đánh giá của bạn đã được cập nhật.");
+      setReviewNotice(
+        result.created ? "Đánh giá đã được tạo." : "Đánh giá của bạn đã được cập nhật.",
+      );
       setReviewState("success");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.movies.reviews(id) }),
@@ -370,7 +372,12 @@ const MovieDetailPage = () => {
     );
   }
 
-  if (!movie) return <div className="bg-[#FAFAFA] container-custom py-20 text-center text-[#2b2d42] font-bold text-xl">Không tìm thấy phim</div>;
+  if (!movie)
+    return (
+      <div className="bg-[#FAFAFA] container-custom py-20 text-center text-[#2b2d42] font-bold text-xl">
+        Không tìm thấy phim
+      </div>
+    );
 
   const safePosterUrl = getSafeResourceUrl(movie.poster_url);
   const safeTrailerUrl = getSafeYouTubeEmbedUrl(movie.trailer_url);
@@ -378,7 +385,6 @@ const MovieDetailPage = () => {
 
   return (
     <div className="bg-[#FAFAFA] min-h-screen text-[#2b2d42] pb-20 font-sans">
-
       {/* 1. HERO BANNER (Phong cách Tripo Games: Sáng, bo góc, 3D) */}
       <div className="relative bg-[#F3F4F6] pt-24 pb-16 overflow-hidden">
         {/* Background pattern trang trí */}
@@ -415,7 +421,9 @@ const MovieDetailPage = () => {
               <div className="bg-white px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5">
                 <Calendar className="w-4 h-4 text-[#DC2626]" />
                 <span className="font-semibold">
-                  {movie.release_date ? new Date(movie.release_date).toLocaleDateString("vi-VN") : "—"}
+                  {movie.release_date
+                    ? new Date(movie.release_date).toLocaleDateString("vi-VN")
+                    : "—"}
                 </span>
               </div>
               <div className="bg-[#FDE047] px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5 text-[#2b2d42] font-bold">
@@ -425,16 +433,24 @@ const MovieDetailPage = () => {
               </div>
             </div>
 
-            <p className="text-gray-600 leading-relaxed max-w-lg line-clamp-4">{movie.description}</p>
+            <p className="text-gray-600 leading-relaxed max-w-lg line-clamp-4">
+              {movie.description}
+            </p>
 
             {/* Nút hành động */}
             {movie.status === "now_showing" && (
               <div className="flex flex-wrap gap-4 mt-4">
-                <a href="#showtimes" className="bg-[#DC2626] hover:bg-[#B91C1C] text-white font-bold px-8 py-3.5 rounded-2xl transition shadow-md shadow-[#DC2626]/30 flex items-center gap-2">
+                <a
+                  href="#showtimes"
+                  className="bg-[#DC2626] hover:bg-[#B91C1C] text-white font-bold px-8 py-3.5 rounded-2xl transition shadow-md shadow-[#DC2626]/30 flex items-center gap-2"
+                >
                   <Calendar className="w-5 h-5" /> Đặt vé ngay
                 </a>
                 {safeTrailerUrl && (
-                  <a href="#trailer" className="bg-white border border-gray-200 hover:bg-gray-50 text-[#2b2d42] font-bold px-8 py-3.5 rounded-2xl transition flex items-center gap-2">
+                  <a
+                    href="#trailer"
+                    className="bg-white border border-gray-200 hover:bg-gray-50 text-[#2b2d42] font-bold px-8 py-3.5 rounded-2xl transition flex items-center gap-2"
+                  >
                     <Play className="w-5 h-5 fill-[#2b2d42]" /> Xem Trailer
                   </a>
                 )}
@@ -446,16 +462,15 @@ const MovieDetailPage = () => {
 
       {/* 2. NỘI DUNG CHI TIẾT */}
       <div className="container-custom py-10 grid grid-cols-1 lg:grid-cols-3 gap-10">
-
         {/* Cột trái: Mô tả, Trailer, Suất chiếu */}
         <div className="lg:col-span-2 space-y-12">
-
           {/* Mô tả */}
-          <div id="description" className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
+          <div
+            id="description"
+            className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100"
+          >
             <h2 className="text-2xl font-bold mb-4">Nội dung phim</h2>
-            <p className="text-gray-600 leading-relaxed text-lg">
-              {movie.description}
-            </p>
+            <p className="text-gray-600 leading-relaxed text-lg">{movie.description}</p>
             <div className="mt-6 grid grid-cols-2 gap-4 border-t border-gray-100 pt-6">
               <div>
                 <p className="text-xs text-gray-400 uppercase font-bold tracking-wide">Đạo diễn</p>
@@ -496,7 +511,10 @@ const MovieDetailPage = () => {
 
           {/* SUẤT CHIẾU */}
           {movie.status === "now_showing" && (
-            <div id="showtimes" className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
+            <div
+              id="showtimes"
+              className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100"
+            >
               <h2 className="text-2xl font-bold mb-6">Suất chiếu</h2>
 
               {/* Chọn ngày */}
@@ -507,17 +525,22 @@ const MovieDetailPage = () => {
                       key={date.value}
                       type="button"
                       onClick={() => setSelectedDate(date.value)}
-                      className={`relative rounded-2xl border-2 px-4 py-3 text-left transition-all min-w-[70px] ${selectedDate === date.value
+                      className={`relative rounded-2xl border-2 px-4 py-3 text-left transition-all min-w-[70px] ${
+                        selectedDate === date.value
                           ? "border-[#DC2626] bg-[#FEF2F2] shadow-sm"
                           : "border-transparent bg-[#F3F4F6] hover:bg-gray-200"
-                        }`}
+                      }`}
                     >
                       {datesWithShows.has(date.value) && (
                         <div className="absolute -top-1 -right-1 h-4 w-4 bg-[#FDE047] rounded-full border-2 border-white shadow-sm"></div>
                       )}
-                      <span className="block text-[10px] opacity-60 font-semibold">{date.weekday}</span>
+                      <span className="block text-[10px] opacity-60 font-semibold">
+                        {date.weekday}
+                      </span>
                       <span className="text-2xl font-bold leading-none">{date.day}</span>
-                      <span className="block text-[10px] opacity-60 font-semibold">{date.month}</span>
+                      <span className="block text-[10px] opacity-60 font-semibold">
+                        {date.month}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -528,10 +551,11 @@ const MovieDetailPage = () => {
                 <button
                   type="button"
                   onClick={() => setSelectedCity("all")}
-                  className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${selectedCity === "all"
+                  className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+                    selectedCity === "all"
                       ? "bg-[#DC2626] text-white"
                       : "bg-[#F3F4F6] hover:bg-gray-200 text-[#2b2d42]"
-                    }`}
+                  }`}
                 >
                   Tất cả
                 </button>
@@ -540,10 +564,11 @@ const MovieDetailPage = () => {
                     key={city}
                     type="button"
                     onClick={() => setSelectedCity(city)}
-                    className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${selectedCity === city
+                    className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+                      selectedCity === city
                         ? "bg-[#DC2626] text-white"
                         : "bg-[#F3F4F6] hover:bg-gray-200 text-[#2b2d42]"
-                      }`}
+                    }`}
                   >
                     {city}
                   </button>
@@ -552,7 +577,9 @@ const MovieDetailPage = () => {
 
               {/* Danh sách rạp */}
               {isLoadingShows ? (
-                <p role="status" className="py-8 text-center text-gray-500">Đang tải suất chiếu...</p>
+                <p role="status" className="py-8 text-center text-gray-500">
+                  Đang tải suất chiếu...
+                </p>
               ) : groupedShowtimes.length === 0 ? (
                 <div className="rounded-2xl bg-[#F3F4F6] border border-dashed border-gray-300 p-10 text-center text-gray-500">
                   Không có suất chiếu cho ngày này.
@@ -560,7 +587,10 @@ const MovieDetailPage = () => {
               ) : (
                 <div className="space-y-6">
                   {groupedShowtimes.map((theater) => (
-                    <div key={theater.id} className="bg-[#F9FAFB] rounded-2xl p-5 border border-gray-100">
+                    <div
+                      key={theater.id}
+                      className="bg-[#F9FAFB] rounded-2xl p-5 border border-gray-100"
+                    >
                       <div className="mb-4">
                         <h3 className="text-lg font-bold flex items-center gap-2">
                           <MapPin className="w-5 h-5 text-[#DC2626]" /> {theater.name}
@@ -607,7 +637,6 @@ const MovieDetailPage = () => {
         {/* 3. SIDEBAR: ĐÁNH GIÁ */}
         <div className="lg:col-span-1 space-y-6">
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 sticky top-6">
-
             {/* Header đánh giá */}
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold">Đánh giá</h2>
@@ -627,7 +656,10 @@ const MovieDetailPage = () => {
               >
                 <FormAlert message={reviewError} />
                 {reviewNotice && (
-                  <p role="status" className="mb-3 rounded-xl bg-green-500/10 p-2 text-xs text-green-600 text-center font-medium">
+                  <p
+                    role="status"
+                    className="mb-3 rounded-xl bg-green-500/10 p-2 text-xs text-green-600 text-center font-medium"
+                  >
                     {reviewNotice}
                   </p>
                 )}
@@ -636,9 +668,7 @@ const MovieDetailPage = () => {
                     Bạn cần có vé đã dùng cho phim này để đánh giá.
                   </p>
                 ) : (
-                  <p className="mb-3 text-xs text-gray-500">
-                    Đánh giá sau khi xem phim.
-                  </p>
+                  <p className="mb-3 text-xs text-gray-500">Đánh giá sau khi xem phim.</p>
                 )}
 
                 {/* Chọn sao */}
@@ -647,15 +677,22 @@ const MovieDetailPage = () => {
                     <button
                       key={r}
                       type="button"
+                      aria-label={`${r} sao`}
                       onClick={() => setReviewValue("rating", r, { shouldValidate: true })}
                       disabled={isReviewDisabled}
                       className="focus:outline-none transition hover:scale-110"
                     >
-                      <Star className={`w-8 h-8 ${r <= reviewRating ? "text-yellow-400 fill-yellow-400" : "text-gray-300"}`} />
+                      <Star
+                        className={`w-8 h-8 ${r <= reviewRating ? "text-yellow-400 fill-yellow-400" : "text-gray-300"}`}
+                      />
                     </button>
                   ))}
                 </div>
-                {reviewErrors.rating && <p className="text-xs text-red-500 text-center mb-2">{reviewErrors.rating.message}</p>}
+                {reviewErrors.rating && (
+                  <p className="text-xs text-red-500 text-center mb-2">
+                    {reviewErrors.rating.message}
+                  </p>
+                )}
 
                 <textarea
                   {...registerReview("comment")}
@@ -664,7 +701,9 @@ const MovieDetailPage = () => {
                   rows="2"
                   disabled={isReviewDisabled}
                 />
-                {reviewErrors.comment && <p className="text-xs text-red-500 mt-1">{reviewErrors.comment.message}</p>}
+                {reviewErrors.comment && (
+                  <p className="text-xs text-red-500 mt-1">{reviewErrors.comment.message}</p>
+                )}
 
                 <div className="flex items-center gap-2 mt-3">
                   <Button
@@ -679,7 +718,9 @@ const MovieDetailPage = () => {
                     <button
                       type="button"
                       disabled={deleteReviewMutation.isPending}
-                      onClick={() => window.confirm("Xóa đánh giá của bạn?") && deleteReviewMutation.mutate()}
+                      onClick={() =>
+                        window.confirm("Xóa đánh giá của bạn?") && deleteReviewMutation.mutate()
+                      }
                       className="text-red-500 text-sm font-semibold hover:underline px-3"
                     >
                       Xóa
@@ -690,7 +731,10 @@ const MovieDetailPage = () => {
             ) : (
               <div className="bg-[#F3F4F6] rounded-2xl p-4 text-center mb-6 border border-dashed border-gray-300">
                 <p className="mb-2 text-sm text-gray-500">Đăng nhập để viết đánh giá</p>
-                <button onClick={() => navigate("/login")} className="bg-[#2b2d42] text-white font-bold py-2 px-6 rounded-xl text-sm hover:bg-gray-800 transition w-full">
+                <button
+                  onClick={() => navigate("/login")}
+                  className="bg-[#2b2d42] text-white font-bold py-2 px-6 rounded-xl text-sm hover:bg-gray-800 transition w-full"
+                >
                   Đăng nhập ngay
                 </button>
               </div>
@@ -702,32 +746,44 @@ const MovieDetailPage = () => {
             ) : reviewsQuery.isError ? (
               <div className="text-center text-sm text-red-500">
                 <p>Lỗi tải đánh giá.</p>
-                <button onClick={() => reviewsQuery.refetch()} className="underline">Thử lại</button>
+                <button onClick={() => reviewsQuery.refetch()} className="underline">
+                  Thử lại
+                </button>
               </div>
             ) : reviews.length === 0 ? (
               <p className="py-6 text-center text-gray-400 text-sm">Chưa có đánh giá nào.</p>
             ) : (
               <div className="space-y-4 max-h-[600px] overflow-y-auto pr-1 custom-scrollbar">
                 {reviews.map((review) => (
-                  <div key={review.id} className="bg-[#F9FAFB] rounded-2xl p-4 border border-gray-100">
+                  <div
+                    key={review.id}
+                    className="bg-[#F9FAFB] rounded-2xl p-4 border border-gray-100"
+                  >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-[#2b2d42] text-white rounded-full flex items-center justify-center font-bold text-xs uppercase">
                           {review.user?.name?.charAt(0) || "U"}
                         </div>
-                        <span className="font-semibold text-sm">{review.user?.name || "Người dùng"}</span>
+                        <span className="font-semibold text-sm">
+                          {review.user?.name || "Người dùng"}
+                        </span>
                       </div>
                       <StarBar rating={review.rating} size="w-3 h-3" />
                     </div>
                     <p className="text-gray-600 text-sm leading-relaxed">{review.comment}</p>
                     <p className="text-[10px] text-gray-400 mt-2">
-                      {review.created_at ? new Date(review.created_at).toLocaleDateString("vi-VN") : "—"}
+                      {review.created_at
+                        ? new Date(review.created_at).toLocaleDateString("vi-VN")
+                        : "—"}
                     </p>
                     {user?.role === "admin" && (
                       <button
                         type="button"
                         disabled={moderateReviewMutation.isPending}
-                        onClick={() => window.confirm("Gỡ đánh giá này?") && moderateReviewMutation.mutate(review.id)}
+                        onClick={() =>
+                          window.confirm("Gỡ đánh giá này?") &&
+                          moderateReviewMutation.mutate(review.id)
+                        }
                         className="mt-2 text-xs text-red-500 font-medium hover:underline"
                       >
                         Gỡ bởi moderator
