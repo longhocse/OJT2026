@@ -41,8 +41,16 @@ const envSchema = z
     SMTP_PASS: z.string().min(1).optional(),
     MAIL_FROM: z.string().min(1).optional(),
     SHOW_CLEANING_BUFFER_MINUTES: z.coerce.number().int().min(0).max(180).default(15),
-    PAYMENT_PROVIDER_MODE: z.enum(["mock"]).default("mock"),
+    PAYMENT_PROVIDER_MODE: z.enum(["mock", "payos"]).default("mock"),
     PAYMENT_WEBHOOK_SECRET: z.string().min(32),
+    PAYOS_CLIENT_ID: z.string().min(1).optional(),
+    PAYOS_API_KEY: z.string().min(1).optional(),
+    PAYOS_CHECKSUM_KEY: z.string().min(32).optional(),
+    PAYOS_API_BASE_URL: z.string().url().default("https://api-merchant.payos.vn"),
+    API_PUBLIC_URL: z.string().url().optional(),
+    PAYOS_RETURN_URL: z.string().url().optional(),
+    PAYOS_CANCEL_URL: z.string().url().optional(),
+    PAYOS_WEBHOOK_URL: z.string().url().optional(),
     TICKET_QR_SECRET: z.string().min(32),
     PAYMENT_PENDING_TTL_MINUTES: z.coerce.number().int().min(1).max(120).default(15),
     CASH_PAYMENT_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(60),
@@ -86,6 +94,17 @@ const envSchema = z
         path: ["SMTP_HOST"],
         message: "SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASS must be provided together",
       });
+    }
+    if (data.PAYMENT_PROVIDER_MODE === "payos") {
+      for (const field of ["PAYOS_CLIENT_ID", "PAYOS_API_KEY", "PAYOS_CHECKSUM_KEY"]) {
+        if (!data[field]) {
+          context.addIssue({
+            code: "custom",
+            path: [field],
+            message: `${field} is required when PAYMENT_PROVIDER_MODE=payos`,
+          });
+        }
+      }
     }
   });
 

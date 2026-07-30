@@ -3,6 +3,10 @@ const { AppError } = require("../utils/AppError");
 const { applyRefundSummary, calculateRefund, getRefundRate } = require("../utils/refundPolicy");
 const { applyPaymentRefund } = require("../services/paymentLifecycleService");
 const { recordAuditLog } = require("../services/auditLogService");
+const {
+  applyTheaterScope,
+  assertBookingAccess,
+} = require("../services/accessControlService");
 
 const removeSensitiveFields = (value) => {
   if (Array.isArray(value)) return value.map(removeSensitiveFields);
@@ -80,6 +84,7 @@ exports.getAdminBookings = async (req, res) => {
   if (paymentStatus) qb.andWhere("booking.payment_status = :paymentStatus", { paymentStatus });
   if (movieId) qb.andWhere("movie.id = :movieId", { movieId });
   if (cinemaId) qb.andWhere("theater.id = :cinemaId", { cinemaId });
+  applyTheaterScope(qb, req, "theater");
   applyDateRange(qb, query, "booking.created_at");
 
   const [bookings, total] = await qb
@@ -96,6 +101,7 @@ exports.getAdminBookings = async (req, res) => {
 exports.getAdminBookingById = async (req, res) => {
   const booking = await loadBooking(AppDataSource.getRepository("Booking"), req.params.id);
   if (!booking) throw new AppError(404, "BOOKING_NOT_FOUND", "Booking not found");
+  await assertBookingAccess(AppDataSource.manager, req, req.params.id);
   res.json(removeSensitiveFields(booking));
 };
 
@@ -110,6 +116,7 @@ exports.cancelAdminBooking = async (req, res) => {
       lock: { mode: "pessimistic_write" },
     });
     if (!booking) throw new AppError(404, "BOOKING_NOT_FOUND", "Booking not found");
+    await assertBookingAccess(manager, req, booking.id);
     if (booking.status === "cancelled") {
       throw new AppError(409, "BOOKING_ALREADY_CANCELLED", "Booking is already cancelled");
     }
@@ -188,6 +195,9 @@ exports.getDashboardStats = async (req, res) => {
   const bookingRepo = AppDataSource.getRepository("Booking");
   const summaryQb = bookingRepo
     .createQueryBuilder("booking")
+    .innerJoin("booking.show", "summaryShow")
+    .innerJoin("summaryShow.screen", "summaryScreen")
+    .innerJoin("summaryScreen.theater", "summaryTheater")
     .select("COUNT(booking.id)", "totalBookings")
     .addSelect(
       "SUM(CASE WHEN booking.status IN ('confirmed','used') THEN 1 ELSE 0 END)",
@@ -199,11 +209,15 @@ exports.getDashboardStats = async (req, res) => {
       "revenue",
     )
     .addSelect("SUM(booking.refunded_amount)", "refund");
+  applyTheaterScope(summaryQb, req, "summaryTheater");
   applyDateRange(summaryQb, query, "booking.created_at");
   const summary = await summaryQb.getRawOne();
 
   const seriesQb = bookingRepo
     .createQueryBuilder("booking")
+    .innerJoin("booking.show", "seriesShow")
+    .innerJoin("seriesShow.screen", "seriesScreen")
+    .innerJoin("seriesScreen.theater", "seriesTheater")
     .select("CONVERT(date, booking.created_at)", "date")
     .addSelect("COUNT(booking.id)", "totalBookings")
     .addSelect(
@@ -213,6 +227,7 @@ exports.getDashboardStats = async (req, res) => {
     .addSelect("SUM(booking.refunded_amount)", "refund")
     .groupBy("CONVERT(date, booking.created_at)")
     .orderBy("CONVERT(date, booking.created_at)", "ASC");
+  applyTheaterScope(seriesQb, req, "seriesTheater");
   applyDateRange(seriesQb, query, "booking.created_at");
   const rawSeries = await seriesQb.getRawMany();
 
@@ -220,18 +235,23 @@ exports.getDashboardStats = async (req, res) => {
     .createQueryBuilder("bookingSeat")
     .innerJoin("bookingSeat.booking", "booking")
     .innerJoin("booking.show", "show")
+    .innerJoin("show.screen", "seatScreen")
+    .innerJoin("seatScreen.theater", "seatTheater")
     .select("COUNT(bookingSeat.id)", "bookedSeats")
     .where("booking.status IN (:...occupiedStatuses)", {
       occupiedStatuses: ["confirmed", "used"],
     });
+  applyTheaterScope(bookedSeatQb, req, "seatTheater");
   applyDateRange(bookedSeatQb, query, "show.start_time");
   const bookedSeatResult = await bookedSeatQb.getRawOne();
 
   const capacityQb = AppDataSource.getRepository("Show")
     .createQueryBuilder("show")
     .innerJoin("show.screen", "screen")
+    .innerJoin("screen.theater", "capacityTheater")
     .select("SUM(screen.total_seats)", "capacity")
     .where("show.status <> :cancelled", { cancelled: "cancelled" });
+  applyTheaterScope(capacityQb, req, "capacityTheater");
   applyDateRange(capacityQb, query, "show.start_time");
   const capacityResult = await capacityQb.getRawOne();
 

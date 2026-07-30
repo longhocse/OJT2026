@@ -1,5 +1,6 @@
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { isOperationRole } from "../../utils/roles";
 
 const SessionLoading = () => (
   <div
@@ -14,7 +15,9 @@ const AccessDenied = () => (
   <main className="min-h-screen bg-gray-950 text-white flex items-center justify-center p-6">
     <div className="max-w-md rounded-2xl border border-red-500/30 bg-gray-900 p-8 text-center">
       <h1 className="text-2xl font-bold">Không đủ quyền truy cập</h1>
-      <p className="mt-3 text-gray-400">Tài khoản của bạn không có quyền quản trị.</p>
+      <p className="mt-3 text-gray-400">
+        Tài khoản của bạn không có quyền truy cập khu vận hành.
+      </p>
       <Link
         to="/"
         className="mt-6 inline-block rounded-lg bg-yellow-500 px-5 py-2 font-semibold text-black"
@@ -33,12 +36,12 @@ export default function AdminRoute({ children }) {
     return <SessionLoading />;
   }
 
-  if (!isAuthenticated) {
+  if (!token && !isAuthenticated) {
     const from = `${location.pathname}${location.search}${location.hash}`;
     return <Navigate to="/login" replace state={{ from }} />;
   }
 
-  if (user?.role !== "admin") return <AccessDenied />;
+  if (user && !isOperationRole(user.role)) return <AccessDenied />;
 
   return children;
 }

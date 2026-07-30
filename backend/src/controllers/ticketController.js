@@ -2,6 +2,7 @@ const { AppDataSource } = require("../config/database");
 const { AppError } = require("../utils/AppError");
 const { createTicketPayload, verifyTicketPayload } = require("../tickets/ticketSecurity");
 const { withTransaction } = require("../services/paymentLifecycleService");
+const { assertBookingAccess } = require("../services/accessControlService");
 
 const ticketRelations = {
   user: true,
@@ -129,7 +130,7 @@ exports.checkInTicket = async (req, res) => {
   const result = await withTransaction(async (manager) => {
     const booking = await manager.getRepository("Booking").findOne({
       where: { id: payload.bookingId },
-      relations: { show: true },
+      relations: { show: { screen: { theater: true } } },
       lock: { mode: "pessimistic_write" },
     });
     if (
@@ -139,6 +140,7 @@ exports.checkInTicket = async (req, res) => {
     ) {
       throw new AppError(404, "TICKET_NOT_FOUND", "Ticket not found");
     }
+    await assertBookingAccess(manager, req, booking.id);
     if (booking.status === "used") return { booking, alreadyCheckedIn: true };
     if (booking.status !== "confirmed") {
       throw new AppError(409, "TICKET_NOT_ACTIVE", "Ticket not active");

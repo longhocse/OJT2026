@@ -2,6 +2,7 @@ const { AppDataSource } = require("../config/database");
 const { env } = require("../config/env");
 const { AppError } = require("../utils/AppError");
 const { signWebhook, verifyWebhook } = require("../payments/paymentSecurity");
+const { getProvider, verifyPayOSData } = require("../payments/providerRegistry");
 const {
   applyPaymentRefund,
   processPaymentEvent,
@@ -10,6 +11,7 @@ const {
 } = require("../services/paymentLifecycleService");
 const { recordAuditLog } = require("../services/auditLogService");
 const { sendTicketEmailForBooking } = require("../services/ticketEmailService");
+const { applyTheaterScope, assertBookingAccess } = require("../services/accessControlService");
 const removeSensitiveFields = (value) => {
   if (value instanceof Date || value == null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map(removeSensitiveFields);
@@ -46,6 +48,34 @@ const notifyTicketIfConfirmed = async (result) => {
 };
 
 exports.handleWebhook = async (req, res) => {
+  if (req.params.provider === "payos") {
+    const { data, signature, success } = req.body || {};
+    if (!data || !verifyPayOSData(data, signature)) {
+      throw new AppError(401, "PAYOS_SIGNATURE_INVALID", "Invalid PayOS signature");
+    }
+    if (!data.orderCode) {
+      return res.json({ received: true, ignored: true });
+    }
+    try {
+      const result = await processPaymentEvent({
+        provider: "payos",
+        providerTransactionId: String(data.orderCode),
+        amount: data.amount,
+        status: success === true && data.code === "00" ? "paid" : "failed",
+      });
+      await notifyTicketIfConfirmed(result);
+      return res.json({
+        received: true,
+        idempotent: result.idempotent,
+        status: result.payment.status,
+      });
+    } catch (error) {
+      if (error.statusCode === 404 || error.code === "PAYMENT_NOT_FOUND") {
+        return res.json({ received: true, ignored: true });
+      }
+      throw error;
+    }
+  }
   if (
     !verifyWebhook({
       timestamp: req.headers["x-payment-timestamp"],
@@ -70,6 +100,45 @@ exports.getPayment = async (req, res) => {
     throw new AppError(403, "PAYMENT_FORBIDDEN", "Forbidden");
   res.json(safe(payment));
 };
+
+exports.reconcilePayOSReturn = async (req, res) => {
+  const orderCode = req.query.orderCode ? String(req.query.orderCode) : "";
+  if (!orderCode) throw new AppError(400, "PAYOS_ORDER_CODE_REQUIRED", "Missing orderCode");
+
+  const provider = getProvider("payos");
+  if (!provider) throw new AppError(409, "PAYMENT_PROVIDER_NOT_FOUND", "Provider not found");
+
+  const details = await provider.getPaymentRequest({ orderCode });
+  const status = String(details.status || "").toUpperCase();
+  const paid = status === "PAID" || status === "SUCCESS" || status === "SUCCEEDED";
+
+  if (!paid) {
+    return res.json({
+      received: true,
+      paid: false,
+      payosStatus: details.status || null,
+    });
+  }
+
+  const result = await processPaymentEvent({
+    provider: "payos",
+    providerTransactionId: orderCode,
+    amount: details.amount,
+    status: "paid",
+  });
+  await notifyTicketIfConfirmed(result);
+
+  return res.json({
+    received: true,
+    paid: true,
+    payosStatus: details.status,
+    idempotent: result.idempotent,
+    bookingStatus: result.booking.status,
+    paymentStatus: result.payment.status,
+    bookingId: result.booking.id,
+  });
+};
+
 exports.completeMockPayment = async (req, res) => {
   if (env.NODE_ENV === "production")
     throw new AppError(404, "MOCK_PAYMENT_DISABLED", "Mock payment disabled");
@@ -99,7 +168,10 @@ exports.getAdminPayments = async (req, res) => {
     .leftJoinAndSelect("payment.booking", "booking")
     .leftJoinAndSelect("booking.user", "user")
     .leftJoinAndSelect("booking.show", "show")
-    .leftJoinAndSelect("show.movie", "movie");
+    .leftJoinAndSelect("show.movie", "movie")
+    .leftJoinAndSelect("show.screen", "screen")
+    .leftJoinAndSelect("screen.theater", "theater");
+  applyTheaterScope(qb, req, "theater");
   if (status) qb.andWhere("payment.status = :status", { status });
   if (provider) qb.andWhere("payment.provider = :provider", { provider });
   if (search)
@@ -121,10 +193,11 @@ exports.confirmCashPayment = async (req, res) => {
   const result = await withTransaction(async (manager) => {
     const payment = await manager.getRepository("Payment").findOne({
       where: { id: req.params.id },
-      relations: { booking: { show: true, bookingSeats: { seat: true } } },
+      relations: { booking: { show: { screen: { theater: true } }, bookingSeats: { seat: true } } },
       lock: { mode: "pessimistic_write" },
     });
     if (!payment) throw new AppError(404, "PAYMENT_NOT_FOUND", "Payment not found");
+    await assertBookingAccess(manager, req, payment.booking.id);
     if (payment.provider !== "cash")
       throw new AppError(409, "PAYMENT_NOT_CASH", "Not cash payment");
     if (payment.status === "paid" && payment.booking.status === "confirmed")
@@ -168,10 +241,11 @@ exports.refundPayment = async (req, res) => {
   const payment = await withTransaction(async (manager) => {
     const current = await manager.getRepository("Payment").findOne({
       where: { id: req.params.id },
-      relations: { booking: true },
+      relations: { booking: { show: { screen: { theater: true } } } },
       lock: { mode: "pessimistic_write" },
     });
     if (!current) throw new AppError(404, "PAYMENT_NOT_FOUND", "Payment not found");
+    await assertBookingAccess(manager, req, current.booking.id);
     if (current.booking.status !== "cancelled")
       throw new AppError(409, "BOOKING_NOT_CANCELLED", "Cancel booking first");
     const updated = await applyPaymentRefund(

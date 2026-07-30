@@ -37,10 +37,10 @@ describe("booking contract", () => {
   });
 
   test("builds only the four fields accepted by the backend", () => {
-    expect(buildBookingPayload(validSession(), "cash")).toEqual({
+    expect(buildBookingPayload(validSession(), "payos")).toEqual({
       showId: SHOW_ID,
       seatIds: [SEAT_ID],
-      paymentMethod: "cash",
+      paymentMethod: "payos",
       lockToken: LOCK_TOKEN,
     });
   });

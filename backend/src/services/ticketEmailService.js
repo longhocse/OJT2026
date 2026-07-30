@@ -1,5 +1,7 @@
 const { AppDataSource } = require("../config/database");
 const { env } = require("../config/env");
+const QRCode = require("qrcode");
+const { createTicketPayload } = require("../tickets/ticketSecurity");
 const { sendMail } = require("./mailService");
 const logger = require("../utils/logger");
 
@@ -42,15 +44,23 @@ const loadTicketBooking = (bookingId) =>
     },
   });
 
-const buildTicketEmail = (booking) => {
+const buildTicketEmail = async (booking) => {
   const show = booking.show || {};
   const movie = show.movie || {};
   const screen = show.screen || {};
   const theater = screen.theater || {};
   const seats = (booking.bookingSeats || []).map(seatLabel).filter(Boolean).join(", ") || "—";
-  const openTicketUrl = ticketUrl();
   const ticketCode = booking.ticket_code || "—";
   const paidAmount = booking.payment?.amount ?? booking.total_price;
+  const openTicketUrl = ticketUrl();
+  const qrPayload = createTicketPayload(booking);
+  const qrCid = `ticket-qr-${booking.id}@movietap`;
+  const qrBuffer = await QRCode.toBuffer(qrPayload, {
+    errorCorrectionLevel: "M",
+    margin: 2,
+    type: "png",
+    width: 240,
+  });
 
   const text = [
     "Vé điện tử MovieTap",
@@ -61,9 +71,10 @@ const buildTicketEmail = (booking) => {
     `Suất chiếu: ${formatDateTime(show.start_time)}`,
     `Rạp/phòng: ${theater.name || "—"} / ${screen.name || "—"}`,
     `Ghế: ${seats}`,
-    `Tổng tiền: ${formatMoney(paidAmount)}`,
+    `Tổng thanh toán: ${formatMoney(paidAmount)}`,
     "",
-    `Mở vé QR tại: ${openTicketUrl}`,
+    "Mã QR đã được đính kèm trong email này.",
+    `Nếu email không hiển thị QR, mở vé trong MovieTap tại: ${openTicketUrl}`,
   ].join("\n");
 
   const html = `<!doctype html>
@@ -74,45 +85,54 @@ const buildTicketEmail = (booking) => {
         <td align="center">
           <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e5e7eb;">
             <tr>
-              <td style="background:#111827;color:#ffffff;padding:28px 32px;">
-                <div style="color:#facc15;font-size:28px;font-weight:800;letter-spacing:.04em;">CINEMA NOIR</div>
-                <div style="margin-top:8px;color:#d1d5db;">Vé điện tử MovieTap</div>
+              <td style="background:#111111;color:#ffffff;padding:22px 28px;">
+                <div style="font-size:24px;font-weight:900;letter-spacing:.02em;">MovieTap</div>
+                <div style="margin-top:8px;color:#e5e7eb;font-size:14px;">Vé điện tử · Đã thanh toán</div>
               </td>
             </tr>
             <tr>
-              <td style="padding:28px 32px;">
-                <p style="margin:0 0 12px;">Xin chào <strong>${escapeHtml(booking.user?.name || booking.user?.email || "bạn")}</strong>,</p>
-                <p style="margin:0 0 20px;">Booking của bạn đã được xác nhận. Vui lòng mở vé QR khi đến rạp để check-in.</p>
-                <div style="border:1px solid #e5e7eb;border-radius:14px;padding:18px;margin-bottom:20px;">
-                  <div style="font-size:12px;color:#6b7280;text-transform:uppercase;font-weight:700;">Mã vé</div>
-                  <div style="font-size:22px;font-weight:800;font-family:'Courier New',monospace;">${escapeHtml(ticketCode)}</div>
-                </div>
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+              <td style="padding:18px 24px;border-bottom:1px solid #e5e7eb;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                   <tr>
-                    <td style="padding:10px 0;border-top:1px solid #e5e7eb;color:#6b7280;">Phim</td>
-                    <td style="padding:10px 0;border-top:1px solid #e5e7eb;text-align:right;font-weight:700;">${escapeHtml(movie.title || "—")}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding:10px 0;border-top:1px solid #e5e7eb;color:#6b7280;">Suất chiếu</td>
-                    <td style="padding:10px 0;border-top:1px solid #e5e7eb;text-align:right;font-weight:700;">${escapeHtml(formatDateTime(show.start_time))}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding:10px 0;border-top:1px solid #e5e7eb;color:#6b7280;">Rạp/phòng</td>
-                    <td style="padding:10px 0;border-top:1px solid #e5e7eb;text-align:right;font-weight:700;">${escapeHtml(theater.name || "—")} / ${escapeHtml(screen.name || "—")}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding:10px 0;border-top:1px solid #e5e7eb;color:#6b7280;">Ghế</td>
-                    <td style="padding:10px 0;border-top:1px solid #e5e7eb;text-align:right;font-weight:700;">${escapeHtml(seats)}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding:10px 0;border-top:1px solid #e5e7eb;color:#6b7280;">Tổng tiền</td>
-                    <td style="padding:10px 0;border-top:1px solid #e5e7eb;text-align:right;font-weight:700;">${escapeHtml(formatMoney(paidAmount))}</td>
+                    <td align="left">
+                      <span style="display:inline-block;background:#dcfce7;color:#166534;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:800;">ĐÃ XÁC NHẬN</span>
+                    </td>
+                    <td align="right" style="font-family:'Courier New',monospace;font-size:14px;font-weight:800;color:#374151;">
+                      ${escapeHtml(ticketCode)}
+                    </td>
                   </tr>
                 </table>
-                <div style="margin-top:26px;text-align:center;">
-                  <a href="${escapeHtml(openTicketUrl)}" style="display:inline-block;background:#d4af37;color:#111827;text-decoration:none;font-weight:800;border-radius:10px;padding:14px 22px;">Mở vé QR</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px;">
+                <p style="margin:0 0 18px;color:#374151;">Xin chào <strong>${escapeHtml(booking.user?.name || booking.user?.email || "bạn")}</strong>, đưa mã QR này cho nhân viên rạp để check-in.</p>
+
+                <div style="border:1px solid #e5e7eb;border-radius:14px;padding:18px;margin-bottom:22px;background:#fafafa;">
+                  <div style="font-size:18px;font-weight:900;margin-bottom:8px;">${escapeHtml(movie.title || "—")}</div>
+                  <div style="font-size:24px;font-weight:900;margin-bottom:8px;">${escapeHtml(formatDateTime(show.start_time))}</div>
+                  <div style="font-weight:700;color:#374151;">${escapeHtml(theater.name || "—")} · ${escapeHtml(screen.name || "—")}</div>
+                  <div style="margin-top:10px;">
+                    <span style="display:inline-block;border:1px solid #e5e7eb;background:#ffffff;border-radius:999px;padding:5px 9px;font-size:12px;color:#374151;">Ghế ${escapeHtml(seats)}</span>
+                    <span style="display:inline-block;border:1px solid #e5e7eb;background:#ffffff;border-radius:999px;padding:5px 9px;font-size:12px;color:#374151;margin-left:6px;">${(booking.bookingSeats || []).length || 1} vé</span>
+                  </div>
                 </div>
-                <p style="margin:22px 0 0;color:#6b7280;font-size:12px;">Vé chỉ hợp lệ cho đúng phim, suất chiếu và ghế ghi trong email này.</p>
+
+                <div style="border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;padding:20px 0;text-align:center;">
+                  <div style="display:inline-block;border:1px solid #e5e7eb;border-radius:14px;padding:14px;background:#ffffff;">
+                    <img src="cid:${qrCid}" width="240" height="240" alt="QR vé ${escapeHtml(ticketCode)}" style="display:block;width:240px;height:240px;" />
+                  </div>
+                </div>
+
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-top:18px;">
+                  <tr>
+                    <td style="padding:10px 0;color:#6b7280;">Tổng thanh toán</td>
+                    <td style="padding:10px 0;text-align:right;font-weight:800;">${escapeHtml(formatMoney(paidAmount))}</td>
+                  </tr>
+                </table>
+
+                <p style="margin:18px 0 0;color:#6b7280;font-size:12px;">ⓘ Đưa mã QR cho nhân viên khi vào rạp. Vé hợp lệ cho đúng suất chiếu, rạp và ghế trên vé.</p>
+                <p style="margin:10px 0 0;color:#9ca3af;font-size:12px;">Nếu email không hiển thị QR, bạn có thể mở vé trong MovieTap tại: <a href="${escapeHtml(openTicketUrl)}" style="color:#2563eb;">${escapeHtml(openTicketUrl)}</a></p>
               </td>
             </tr>
           </table>
@@ -122,7 +142,17 @@ const buildTicketEmail = (booking) => {
   </body>
 </html>`;
 
-  return { text, html };
+  return {
+    text,
+    html,
+    attachments: [
+      {
+        filename: `${ticketCode}.png`,
+        content: qrBuffer,
+        cid: qrCid,
+      },
+    ],
+  };
 };
 
 const sendTicketEmailForBooking = async (bookingId) => {
@@ -131,12 +161,13 @@ const sendTicketEmailForBooking = async (bookingId) => {
     if (!booking?.user?.email || !["confirmed", "used"].includes(booking.status)) {
       return { sent: false, skipped: true };
     }
-    const { text, html } = buildTicketEmail(booking);
+    const { text, html, attachments } = await buildTicketEmail(booking);
     const result = await sendMail({
       to: booking.user.email,
       subject: `Vé điện tử MovieTap - ${booking.show?.movie?.title || booking.ticket_code}`,
       text,
       html,
+      attachments,
     });
     logger.info("ticket_email_processed", {
       bookingId: booking.id,

@@ -167,7 +167,7 @@ export const reviewSchema = z.object({
 });
 
 export const checkoutSchema = z.object({
-  paymentMethod: z.enum(["credit_card", "vnpay", "momo", "cash"], {
+  paymentMethod: z.enum(["payos"], {
     message: "Phương thức thanh toán không hợp lệ.",
   }),
 });

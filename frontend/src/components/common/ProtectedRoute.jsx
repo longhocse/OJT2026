@@ -16,7 +16,7 @@ export default function ProtectedRoute({ children }) {
     return <SessionLoading />;
   }
 
-  if (!isAuthenticated) {
+  if (!token && !isAuthenticated) {
     const from = `${location.pathname}${location.search}${location.hash}`;
     return <Navigate to="/login" replace state={{ from }} />;
   }

@@ -4,6 +4,11 @@ const { AppError } = require("../utils/AppError");
 const { applyRefundSummary } = require("../utils/refundPolicy");
 const { applyPaymentRefund } = require("../services/paymentLifecycleService");
 const { recordAuditLog } = require("../services/auditLogService");
+const {
+  applyTheaterScope,
+  assertScreenAccess,
+  assertShowAccess,
+} = require("../services/accessControlService");
 
 const effectiveStatus = (show, now = new Date()) => {
   if (show.status === "cancelled") return "cancelled";
@@ -172,6 +177,7 @@ exports.getAdminShows = async (req, res) => {
     .leftJoinAndSelect("show.screen", "screen")
     .leftJoinAndSelect("screen.theater", "theater");
   applyShowFilters(qb, query, { admin: true });
+  applyTheaterScope(qb, req, "theater");
   const [shows, total] = await qb
     .orderBy("show.start_time", "DESC")
     .skip((page - 1) * limit)
@@ -202,6 +208,7 @@ exports.getShowById = async (req, res) => {
 exports.getAdminShowById = async (req, res) => {
   const show = await loadShow(AppDataSource.getRepository("Show"), req.params.id);
   if (!show) throw new AppError(404, "SHOW_NOT_FOUND", "Show not found");
+  await assertShowAccess(AppDataSource.manager, req, req.params.id);
   res.json(serializeShow(show));
 };
 
@@ -236,6 +243,7 @@ exports.getSeatsByShow = async (req, res) => {
 exports.createShow = async (req, res) => {
   const showId = await withTransaction(async (manager) => {
     const input = res.locals.validated.body;
+    await assertScreenAccess(manager, req, input.screen.id);
     const { movie, screen } = await validateSchedule(manager, input);
     const showRepo = manager.getRepository("Show");
     const show = showRepo.create({
@@ -262,6 +270,7 @@ exports.createShow = async (req, res) => {
 exports.createBulkShows = async (req, res) => {
   const input = res.locals.validated.body;
   const result = await withTransaction(async (manager) => {
+    await assertScreenAccess(manager, req, input.screen.id);
     const movie = await manager
       .getRepository("Movie")
       .findOneBy({ id: input.movie.id, is_active: true });
@@ -366,8 +375,10 @@ exports.updateShow = async (req, res) => {
     if ((await manager.getRepository("Booking").count({ where: { show: { id: show.id } } })) > 0) {
       throw new AppError(409, "SHOW_HAS_BOOKINGS", "A show with bookings cannot be edited");
     }
+    await assertShowAccess(manager, req, show.id);
 
     const input = res.locals.validated.body;
+    await assertScreenAccess(manager, req, input.screen.id);
     const { movie, screen } = await validateSchedule(manager, input, show.id);
     Object.assign(show, input, { movie, screen });
     await showRepo.save(show);
@@ -389,6 +400,7 @@ exports.cancelShow = async (req, res) => {
       lock: { mode: "pessimistic_write" },
     });
     if (!show) throw new AppError(404, "SHOW_NOT_FOUND", "Show not found");
+    await assertShowAccess(manager, req, show.id);
     if (show.status === "cancelled") {
       throw new AppError(409, "SHOW_ALREADY_CANCELLED", "Show is already cancelled");
     }
@@ -460,6 +472,7 @@ exports.deleteShow = async (req, res) => {
       lock: { mode: "pessimistic_write" },
     });
     if (!show) throw new AppError(404, "SHOW_NOT_FOUND", "Show not found");
+    await assertShowAccess(manager, req, show.id);
     if (new Date(show.start_time) <= new Date()) {
       throw new AppError(409, "SHOW_ALREADY_STARTED", "A started show cannot be deleted");
     }

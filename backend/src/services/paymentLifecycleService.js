@@ -54,21 +54,77 @@ const paymentForUpdate = (manager, where) =>
     lock: { mode: "pessimistic_write" },
   });
 
+const restoreExpiredBookingIfSeatsAvailable = async (manager, booking, now) => {
+  if (booking.status !== "expired" || !booking.show || new Date(booking.show.start_time) <= now) {
+    return false;
+  }
+
+  const states = manager.getRepository("ShowSeatState");
+  const lockedStates = [];
+  for (const bookingSeat of booking.bookingSeats || []) {
+    const state = await states.findOne({
+      where: { show: { id: booking.show.id }, seat: { id: bookingSeat.seat.id } },
+      relations: { booking: true },
+      lock: { mode: "pessimistic_write" },
+    });
+    if (!state || (state.status !== "available" && String(state.booking?.id) !== String(booking.id))) {
+      return false;
+    }
+    lockedStates.push({ state, bookingSeat });
+  }
+
+  for (const { state, bookingSeat } of lockedStates) {
+    state.status = "booked";
+    state.booking = booking;
+    state.lockedByUser = null;
+    state.lock_token = null;
+    state.locked_until = null;
+    bookingSeat.status = "confirmed";
+    await states.save(state);
+  }
+  if (booking.bookingSeats?.length) {
+    await manager.getRepository("BookingSeat").save(booking.bookingSeats);
+  }
+  booking.status = "confirmed";
+  booking.payment_status = "paid";
+  booking.expires_at = null;
+  return true;
+};
+
 const processPaymentEvent = (event) =>
   withTransaction(async (manager) => {
-    const payment = await paymentForUpdate(manager, { id: event.paymentId });
+    const payment = event.paymentId
+      ? await paymentForUpdate(manager, { id: event.paymentId })
+      : await paymentForUpdate(manager, {
+          provider: event.provider,
+          provider_transaction_id: String(event.providerTransactionId || ""),
+        });
     if (!payment) throw new AppError(404, "PAYMENT_NOT_FOUND", "Payment not found");
     if (
       payment.provider_transaction_id &&
       event.providerTransactionId !== payment.provider_transaction_id
     )
       throw new AppError(409, "PAYMENT_TRANSACTION_MISMATCH", "Transaction mismatch");
+    if (
+      payment.provider === "payos" &&
+      event.amount !== undefined &&
+      Math.round(Number(event.amount)) !== Math.round(Number(payment.amount))
+    ) {
+      throw new AppError(409, "PAYMENT_AMOUNT_MISMATCH", "Payment amount mismatch");
+    }
     const booking = payment.booking;
     const now = new Date();
     if (event.status === "paid") {
       if (payment.status === "paid" && booking.status === "confirmed")
         return { payment, booking, idempotent: true };
-      if (booking.status !== "pending_payment" || new Date(booking.expires_at) <= now) {
+      const canConfirmPending =
+        booking.status === "pending_payment" &&
+        booking.expires_at &&
+        new Date(booking.expires_at) > now;
+      const restoredExpired = canConfirmPending
+        ? false
+        : await restoreExpiredBookingIfSeatsAvailable(manager, booking, now);
+      if (!canConfirmPending && !restoredExpired) {
         const provider = getProvider(payment.provider);
         if (!provider) throw new AppError(409, "PAYMENT_PROVIDER_NOT_FOUND", "Provider not found");
         await provider.refund({ payment, amount: Number(payment.amount) });
@@ -83,9 +139,11 @@ const processPaymentEvent = (event) =>
       } else {
         payment.status = "paid";
         payment.paid_at = now;
-        booking.status = "confirmed";
-        booking.payment_status = "paid";
-        booking.expires_at = null;
+        if (canConfirmPending) {
+          booking.status = "confirmed";
+          booking.payment_status = "paid";
+          booking.expires_at = null;
+        }
       }
     } else if (event.status === "failed") {
       if (payment.status === "failed" && booking.status === "expired")

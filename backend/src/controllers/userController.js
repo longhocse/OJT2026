@@ -3,6 +3,7 @@ const { Like } = require("typeorm");
 const { AppError } = require("../utils/AppError");
 const { revokeUserSessions } = require("../services/authTokenService");
 const { recordAuditLog } = require("../services/auditLogService");
+const { ADMIN_ROLE, CUSTOMER_ROLE } = require("../services/accessControlService");
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -22,6 +23,12 @@ const toPublicUser = (user) => ({
   role: user.role,
   is_active: user.is_active !== false,
   created_at: user.created_at,
+  theater: user.theater
+    ? {
+      id: user.theater.id,
+      name: user.theater.name,
+    }
+    : null,
 });
 
 exports.getAllUsers = async (req, res) => {
@@ -44,6 +51,9 @@ exports.getAllUsers = async (req, res) => {
       created_at: true,
     },
     where,
+    relations: {
+      theater: true,
+    },
     order: { created_at: "DESC" },
     skip: (page - 1) * limit,
     take: limit,
@@ -69,16 +79,19 @@ exports.updateUserAccess = async (req, res) => {
     const repository = runner.manager.getRepository("User");
     const user = await repository.findOne({
       where: { id: req.params.id },
+      relations: {
+        theater: true,
+      },
       lock: { mode: "pessimistic_write" },
     });
     if (!user) throw new AppError(404, "USER_NOT_FOUND", "User not found");
     const update = res.locals.validated.body;
     const removesActiveAdmin =
-      user.role === "admin" &&
+      user.role === ADMIN_ROLE &&
       user.is_active !== false &&
-      (update.role === "customer" || update.is_active === false);
+      (update.role === CUSTOMER_ROLE || update.is_active === false);
     if (removesActiveAdmin) {
-      const activeAdmins = await repository.count({ where: { role: "admin", is_active: true } });
+      const activeAdmins = await repository.count({ where: { role: ADMIN_ROLE, is_active: true } });
       if (activeAdmins <= 1) {
         throw new AppError(
           409,
@@ -89,11 +102,43 @@ exports.updateUserAccess = async (req, res) => {
     }
     const accessChanged =
       (update.role && update.role !== user.role) ||
-      (typeof update.is_active === "boolean" && update.is_active !== user.is_active);
-    Object.assign(user, update);
+      (typeof update.is_active === "boolean" && update.is_active !== user.is_active) ||
+      Array.isArray(update.theaterIds);
+    Object.assign(user, accessUpdate);
+    await repository.save(user);
+    const { theaterId, ...accessUpdate } = update;
+
+    Object.assign(user, accessUpdate);
+
+    if (theaterId !== undefined) {
+      if (theaterId) {
+        const theater = await runner.manager.getRepository("Theater").findOne({
+          where: { id: theaterId },
+        });
+
+        if (!theater) {
+          throw new AppError(
+            400,
+            "THEATER_NOT_FOUND",
+            "Theater not found"
+          );
+        }
+
+        user.theater = theater;
+      } else {
+        user.theater = null;
+      }
+    }
+
     await repository.save(user);
     if (accessChanged) await revokeUserSessions(runner.manager, user.id);
     await runner.commitTransaction();
+    const updatedUser = await AppDataSource.getRepository("User").findOne({
+      where: { id: user.id },
+      relations: {
+        theater: true,
+      },
+    });
     await recordAuditLog(req, {
       action: "user.update_access",
       resourceType: "User",
@@ -102,9 +147,10 @@ exports.updateUserAccess = async (req, res) => {
         role: user.role,
         is_active: user.is_active !== false,
         sessionsRevoked: accessChanged,
+        theaterId,
       },
     });
-    res.json(toPublicUser(user));
+    res.json(toPublicUser(updatedUser || user));
   } catch (error) {
     if (runner.isTransactionActive) await runner.rollbackTransaction();
     throw error;

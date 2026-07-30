@@ -6,6 +6,7 @@ jest.mock("../redux/store", () => ({
 }));
 jest.mock("./authSession", () => ({ clearClientSession: jest.fn(() => Promise.resolve()) }));
 
+import axios from "axios";
 import api, { handleResponseError, setUnauthorizedHandler } from "./api";
 import { store as mockStore } from "../redux/store";
 import { clearClientSession } from "./authSession";
@@ -16,6 +17,7 @@ describe("Axios authentication behavior", () => {
     mockStore.getState.mockClear();
     mockStore.getState.mockReturnValue({ auth: { token: "access-token" } });
     clearClientSession.mockClear();
+    jest.restoreAllMocks();
   });
 
   test("adds the persisted access token to requests", () => {
@@ -26,16 +28,26 @@ describe("Axios authentication behavior", () => {
     expect(config.params?.userId).toBeUndefined();
   });
 
-  test("clears the session and delegates navigation after an expired token", async () => {
+  test("keeps the local session when refresh is rejected during a tunnel/demo session", async () => {
     const onUnauthorized = jest.fn();
     const cleanup = setUnauthorizedHandler(onUnauthorized);
+    jest.spyOn(axios, "post").mockRejectedValue({ response: { status: 401 } });
     const error = { response: { status: 401 }, config: { url: "/auth/me" } };
 
     await expect(handleResponseError(error)).rejects.toBe(error);
 
-    expect(clearClientSession).toHaveBeenCalledTimes(1);
-    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(clearClientSession).not.toHaveBeenCalled();
+    expect(onUnauthorized).not.toHaveBeenCalled();
     cleanup();
+  });
+
+  test("keeps the client session when refresh fails because of a transient network issue", async () => {
+    jest.spyOn(axios, "post").mockRejectedValue(new Error("network"));
+    const error = { response: { status: 401 }, config: { url: "/auth/me" } };
+
+    await expect(handleResponseError(error)).rejects.toBe(error);
+
+    expect(clearClientSession).not.toHaveBeenCalled();
   });
 
   test("does not globally log out for invalid login credentials or a 403", async () => {

@@ -18,6 +18,7 @@ const RefreshToken = require("../models/RefreshToken");
 const PasswordResetToken = require("../models/PasswordResetToken");
 const EmailVerificationToken = require("../models/EmailVerificationToken");
 const AuditLog = require("../models/AuditLog");
+const UserTheater = require("../models/UserTheater");
 
 const AppDataSource = new DataSource({
   type: "mssql",
@@ -53,6 +54,7 @@ const AppDataSource = new DataSource({
     PasswordResetToken,
     EmailVerificationToken,
     AuditLog,
+    UserTheater,
   ],
 
   synchronize: false, // Không tự động sync để tránh mất dữ liệu

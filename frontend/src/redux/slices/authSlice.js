@@ -25,8 +25,6 @@ const authSlice = createSlice({
       state.verificationStatus = "authenticated";
     },
     startSessionVerification: (state) => {
-      state.user = null;
-      state.isAuthenticated = false;
       state.verificationStatus = "verifying";
     },
     sessionVerified: (state, action) => {
@@ -34,10 +32,19 @@ const authSlice = createSlice({
       state.isAuthenticated = true;
       state.verificationStatus = "authenticated";
     },
+    sessionVerificationFailed: (state) => {
+      state.verificationStatus = state.token ? "authenticated" : "idle";
+      state.isAuthenticated = Boolean(state.token);
+    },
     logout: clearSession,
   },
 });
 
-export const { setCredentials, startSessionVerification, sessionVerified, logout } =
-  authSlice.actions;
+export const {
+  setCredentials,
+  startSessionVerification,
+  sessionVerified,
+  sessionVerificationFailed,
+  logout,
+} = authSlice.actions;
 export default authSlice.reducer;

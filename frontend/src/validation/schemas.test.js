@@ -119,9 +119,7 @@ describe("client validation matches the backend contracts", () => {
 
   test("checkout accepts only backend payment methods", () => {
     expect(checkoutSchema.safeParse({ paymentMethod: "paypal" }).success).toBe(false);
-    ["credit_card", "vnpay", "momo", "cash"].forEach((paymentMethod) => {
-      expect(checkoutSchema.safeParse({ paymentMethod }).success).toBe(true);
-    });
+    expect(checkoutSchema.safeParse({ paymentMethod: "payos" }).success).toBe(true);
   });
 });
 

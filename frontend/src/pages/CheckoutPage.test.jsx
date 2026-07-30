@@ -149,7 +149,7 @@ describe("CheckoutPage integration", () => {
     expect(bookingService.createBooking.mock.calls[0][0]).toEqual({
       showId: SHOW_ID,
       seatIds: [SEAT_ID],
-      paymentMethod: "credit_card",
+      paymentMethod: "payos",
       lockToken: LOCK_TOKEN,
     });
     expect(await screen.findByText("Success route")).toBeInTheDocument();

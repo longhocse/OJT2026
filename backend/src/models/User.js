@@ -32,6 +32,10 @@ module.exports = new EntitySchema({
       length: 20,
       default: "customer",
     },
+    theater_id: {
+      type: "uuid",
+      nullable: true,
+    },
     is_active: {
       type: "bit",
       default: true,
@@ -70,6 +74,14 @@ module.exports = new EntitySchema({
       target: "EmailVerificationToken",
       type: "one-to-many",
       inverseSide: "user",
+    },
+    theater: {
+      target: "Theater",
+      type: "many-to-one",
+      joinColumn: {
+        name: "theater_id",
+      },
+      nullable: true,
     },
   },
 });

@@ -9,7 +9,7 @@ import AuthSessionManager from "./AuthSessionManager";
 import { clearClientSession } from "../../services/authSession";
 
 jest.mock("../../services/authService", () => ({
-  authService: { getMe: jest.fn() },
+  authService: { getMe: jest.fn(), refresh: jest.fn() },
 }));
 
 jest.mock("../../services/api", () => ({
@@ -64,8 +64,33 @@ test("verifies a persisted token with /auth/me before authenticating", async () 
   expect(store.getState().auth.user).toEqual(verifiedUser);
 });
 
-test("purges a persisted session when /auth/me rejects it", async () => {
-  authService.getMe.mockRejectedValue(new Error("expired"));
+test("keeps a persisted session when /auth/me has a transient network failure", async () => {
+  authService.getMe.mockRejectedValue(new Error("network"));
+  const store = configureStore({
+    reducer: { auth: authReducer },
+    preloadedState: {
+      auth: {
+        user: { id: "user-1", name: "Persisted", role: "customer" },
+        token: "persisted",
+        isAuthenticated: true,
+        verificationStatus: "idle",
+      },
+    },
+  });
+  render(
+    <Provider store={store}>
+      <MemoryRouter>
+        <AuthSessionManager />
+      </MemoryRouter>
+    </Provider>,
+  );
+  await waitFor(() => expect(store.getState().auth.verificationStatus).toBe("authenticated"));
+  expect(clearClientSession).not.toHaveBeenCalled();
+});
+
+test("keeps a persisted session when /auth/me and refresh both reject authorization", async () => {
+  authService.getMe.mockRejectedValue({ response: { status: 401 } });
+  authService.refresh.mockRejectedValue({ response: { status: 401 } });
   const store = configureStore({
     reducer: { auth: authReducer },
     preloadedState: {
@@ -79,5 +104,6 @@ test("purges a persisted session when /auth/me rejects it", async () => {
       </MemoryRouter>
     </Provider>,
   );
-  await waitFor(() => expect(clearClientSession).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(store.getState().auth.verificationStatus).toBe("authenticated"));
+  expect(clearClientSession).not.toHaveBeenCalled();
 });
